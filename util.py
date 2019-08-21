@@ -44,5 +44,7 @@ def from_crystal(alat, basis, tau, out_type):
     # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
     if out_type == 'crystal':
         return tau
+    elif out_type == 'angstrom':
+        return (basis @ tau.T).T
     else:
         raise ValueError("Coord. type {}".format(in_type))

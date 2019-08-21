@@ -47,7 +47,7 @@ if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
 
     # Parse files
-    final, relax = parse_relax(args.in_file)
+    final, relax = parse_relax(args.in_file, coord_type='angstrom')
     _, basis = get_basis(args.in_file)
 
     # Keep final or full relax data
