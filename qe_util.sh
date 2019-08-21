@@ -16,12 +16,16 @@ geometry)
     shift
     $DIR/get_geom.sh $@
     ;;
+relax)
+    shift
+    python3 $DIR/relax.py $@
+    ;;
 bands)
     shift
     python3 $DIR/parse_bands.py $@
     ;;
 *)
-    echo "Available modes are 'template,' 'energy,' 'geometry' and 'bands'"
+    echo "Available modes are 'template,' 'energy,' 'geometry', 'relax' and 'bands'"
     exit 1
     ;;
 esac
