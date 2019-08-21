@@ -5,10 +5,7 @@ Parser for pw.x bands output files.
 import numpy as np
 import re
 
-
-def parse_vector(s, *_, num_re=re.compile(r"[\d.-]+")):
-    # type: (Text) -> Tuple[float]
-    return tuple(map(float, num_re.findall(s)))
+from util import parse_vector
 
 
 def group(it, n):
