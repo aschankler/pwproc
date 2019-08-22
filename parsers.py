@@ -186,3 +186,15 @@ def parse_relax(path, coord_type='crystal'):
     relax_data = (energies, species, (pos_i,) + pos)
 
     return final_data, relax_data
+
+
+def get_save_file(path):
+    # (path) -> str
+    """Extract the prefix from pw.x output."""
+    save_re = re.compile(r"[ \t]+Writing output data file ([-\w]+).save/")
+    with open(path) as f:
+        for line in f:
+            if save_re.match(line):
+                return save_re.match(line).group(1)
+            else:
+                pass
