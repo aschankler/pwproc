@@ -37,7 +37,9 @@ def parse_args(args):
     parser.add_argument('in_file', action='store', nargs='+')
     parser.add_argument('--xsf', action='store', metavar='FILE')
     parser.add_argument('--energy', action='store', metavar='FILE')
+    # TODO: final and initial should be mutually exclusive, merged in code below
     parser.add_argument('--final', action='store_true')
+    parser.add_argument('--initial', action='store_true')
 
     return parser.parse_args(args)
 
@@ -94,12 +96,16 @@ if __name__ == '__main__':
                 data = next(iter(relax_data.values()))
                 basis, data = data
                 _, species, tau = data
+                if args.initial:
+                    tau = tau[0]
                 with open(args.xsf, 'w') as f:
                     f.writelines(gen_xsf(basis, species, tau))
         else:
             for prefix, data in relax_data.items():
                 basis, data = data
                 _, species, tau = data
+                if args.initial:
+                    tau = tau[0]
                 with open(args.xsf.format(PREFIX=prefix), 'w') as f:
                     f.writelines(gen_xsf(basis, species, tau))
 
@@ -110,6 +116,8 @@ if __name__ == '__main__':
                 energy = relax_data[pref][1][0]
                 if args.final:
                     f.write("{}: {}\n".format(pref, energy))
+                elif args.initial:
+                    f.write("{}: {}\n".format(pref, energy[0]))
                 else:
                     f.write(pref + '\n')
                     for e in energy:
