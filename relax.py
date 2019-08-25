@@ -37,9 +37,9 @@ def parse_args(args):
     parser.add_argument('in_file', action='store', nargs='+')
     parser.add_argument('--xsf', action='store', metavar='FILE')
     parser.add_argument('--energy', action='store', metavar='FILE')
-    # TODO: final and initial should be mutually exclusive, merged in code below
-    parser.add_argument('--final', action='store_true')
-    parser.add_argument('--initial', action='store_true')
+    endpt = parser.add_mutually_exclusive_group()
+    endpt.add_argument('--final', dest='endpoint', action='store_const', const='final')
+    endpt.add_argument('--initial', dest='endpoint', action='store_const', const='initial')
 
     return parser.parse_args(args)
 
@@ -77,48 +77,49 @@ if __name__ == '__main__':
         else:
             relax_data[prefix] = (basis, final, relax)
 
-    # Keep final or full relax data
-    for pref, data in relax_data.items():
-        if args.final:
-            if data[1] is not None:
-                relax_data[pref] = (data[0], data[1])
-            else:
+    # Check final
+    if args.endpoint == 'final':
+        for pref, data in relax_data.items():
+            if data[1] is None:
                 raise ValueError('Relaxation did not finish for {}'.format(pref))
-        else:
-            relax_data[pref] = (data[0], data[2])
 
     # Write XSF file
+    def save_xsf(path, data):
+        basis, final_data, relax_data = data
+        if args.endpoint is None:
+            _, species, tau = relax_data
+        elif args.endpoint == 'final':
+            _, species, tau = final_data
+        else:
+            _, species, tau = relax_data
+            tau = tau[0]
+        with open(path, 'w') as f:
+            f.writelines(gen_xsf(basis, species, tau))
+
     if args.xsf is not None:
         if '{PREFIX}' not in args.xsf:
             if len(relax_data) > 1:
                 raise ValueError('Saving multiple structures to same file')
             else:
+                # Grab the first (and only) entry
                 data = next(iter(relax_data.values()))
-                basis, data = data
-                _, species, tau = data
-                if args.initial:
-                    tau = tau[0]
-                with open(args.xsf, 'w') as f:
-                    f.writelines(gen_xsf(basis, species, tau))
+                save_xsf(args.xsf, data)
         else:
             for prefix, data in relax_data.items():
-                basis, data = data
-                _, species, tau = data
-                if args.initial:
-                    tau = tau[0]
-                with open(args.xsf.format(PREFIX=prefix), 'w') as f:
-                    f.writelines(gen_xsf(basis, species, tau))
+                save_xsf(args.xsf.format(PREFIX=prefix), data)
 
     # Write energy
     if args.energy is not None:
         with open(args.energy, 'w') as f:
             for pref in relax_data:
-                energy = relax_data[pref][1][0]
-                if args.final:
+                if args.endpoint == 'final':
+                    energy = relax_data[pref][1][0]
                     f.write("{}: {}\n".format(pref, energy))
-                elif args.initial:
+                elif args.endpoint == 'initial':
+                    energy = relax_data[pref][2][0]
                     f.write("{}: {}\n".format(pref, energy[0]))
                 else:
+                    energy = relax_data[pref][2][0]
                     f.write(pref + '\n')
                     for e in energy:
                         f.write('{}\n'.format(e))
