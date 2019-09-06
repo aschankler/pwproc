@@ -94,7 +94,7 @@ def get_relax_data(path):
         positions: Vector of atomic positions for each step. Does not include
             initial position but includes final position if relaxation finished
     """
-    geom_header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom)\)")
+    geom_header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
     energy_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
     final_energy_re = re.compile(r"[ \t]+Final energy[ \t]+=[ \t]+(-[.\d]+) Ry")
     atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
