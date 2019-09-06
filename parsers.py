@@ -97,7 +97,7 @@ def get_relax_data(path):
     basis_header_re = re.compile(r"CELL_PARAMETERS \((angstrom)\)")
     geom_header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
     energy_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
-    final_energy_re = re.compile(r"[ \t]+Final energy[ \t]+=[ \t]+(-[.\d]+) Ry")
+    final_energy_re = re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry")
     atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
     basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
 
@@ -140,9 +140,19 @@ def get_relax_data(path):
                     geom_buf.append(geom_header_re.match(line).group(1))
                 elif final_energy_re.match(line):
                     assert final_energy is None
-                    final_energy = float(final_energy_re.match(line).group(1))
+                    m = final_energy_re.match(line)
+                    final_type = m.group(1)
+                    final_energy = float(m.group(2))
                 else:
                     pass
+
+    # If vc-relax, the true final energy is run in a new scf calculation
+    if final_energy is not None:
+        if final_type == 'enthalpy':
+            final_energy = energies[-1]
+            energies = energies[:-1]
+        else:
+            assert final_type == 'energy'
 
     # Process geometry buffer to gather species and coordinate types
     def parse_geom_buf(buf):
