@@ -10,7 +10,7 @@ def _set_precision(x, n, signed=True):
     x = abs(x) if not signed else x
     nunits = 1 if round(x) == 0 else int(log10(abs(x))) + 1
     p = n + nunits
-    return "{{v:0<{sf}{w}.{p}}}".format(p=p, w=(p+2), sf=sflag) \
+    return "{{v:0<{sf}{w}.{p}f}}".format(p=p, w=(p+2), sf=sflag) \
            .format(v=round(x, n))
 
 
