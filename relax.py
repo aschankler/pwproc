@@ -9,6 +9,22 @@ from parsers import parse_relax, get_basis, get_save_file
 
 
 class RelaxData:
+    """Data about a relaxation run.
+
+    prefix: str
+        Calculation prefix
+    endpoint: str
+        If None, object contains full relax information, else must be 'final'
+        or 'initial'
+    basis: np.ndarray
+        Crystal basis in angstrom
+    energy: List[float]
+        Energy in Ry
+    species: Tuple[str, ...]
+        Atomic species present
+    tau: np.ndarray
+        Atomic positions in crystal basis
+    """
     prefix = None
     endpoint = None
     basis = None
