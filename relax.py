@@ -5,7 +5,7 @@ Parser for pw.x relax output.
 import numpy as np
 
 from argparse import ArgumentParser
-from parsers import parse_relax, get_basis, get_save_file
+from parsers import parse_relax, get_save_file
 
 
 class RelaxData:
@@ -44,6 +44,7 @@ class RelaxData:
         assert self.endpoint is None
         new_obj = copy(self)
         new_obj.energy = self.energy[0]
+        new_obj.basis = self.basis[0]
         new_obj.tau = self.tau[0]
         new_obj.endpoint = 'initial'
         return new_obj
@@ -53,13 +54,13 @@ class RelaxData:
         from copy import copy
         assert isinstance(other, self.__class__)
         assert self.prefix == other.prefix
-        assert np.allclose(self.basis, other.basis)
         assert self.species == other.species
         assert self.endpoint is None and other.endpoint is None
         new_energy = self.energy + other.energy
         new_tau = self.tau + other.tau
         new_obj = copy(self)
         new_obj.energy = new_energy
+        new_obj.basis = self.basis + other.basis
         new_obj.tau = new_tau
 
         return new_obj
@@ -70,17 +71,16 @@ class RelaxData:
 
 def parse_file(path):
     final, relax = parse_relax(path, coord_type='angstrom')
-    _, basis = get_basis(path)
     prefix = get_save_file(path)
 
     if final is None:
         final_data = None
     else:
-        final_data = RelaxData(prefix=prefix, basis=basis, energy=final[0],
-                               species=final[1], tau=final[2], endpoint='final')
+        final_data = RelaxData(prefix=prefix, basis=final[1], energy=final[0],
+                               species=final[2], tau=final[3], endpoint='final')
 
-    relax_data = RelaxData(prefix=prefix, basis=basis, energy=relax[0],
-                           species=relax[1], tau=relax[2])
+    relax_data = RelaxData(prefix=prefix, basis=relax[1], energy=relax[0],
+                           species=relax[2], tau=relax[3])
 
     return (prefix, final_data, relax_data)
 
@@ -122,15 +122,18 @@ def gen_xsf(data):
         yield 'ANIMSTEPS {}\n'.format(nsteps)
 
     yield 'CRYSTAL\n'
-    yield 'PRIMVEC\n'
-    yield format_basis(data.basis) + '\n'
+
 
     if not animate:
+        yield 'PRIMVEC\n'
+        yield format_basis(data.basis) + '\n'
         yield 'PRIMCOORD\n'
         yield "{} 1\n".format(nat)
         yield format_tau(data.species, data.tau) + '\n'
     else:
         for i in range(nsteps):
+            yield 'PRIMVEC {}\n'.format(i+1)
+            yield format_basis(data.basis[i]) + '\n'
             yield 'PRIMCOORD {}\n'.format(i+1)
             yield "{} 1\n".format(nat)
             yield format_tau(data.species, data.tau[i]) + '\n'

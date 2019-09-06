@@ -12,9 +12,9 @@ from util import parse_vector
 # Position matrix
 # Tau = np.ndarray[natoms, 3]
 
-def get_basis(path):
+def get_init_basis(path):
     # type: (path) -> Tuple[float, np.ndarray]
-    """Extracts basis in angstrom from pw.x output."""
+    """Extracts the initial basis in angstrom from pw.x output."""
     bohr_to_ang = 0.529177
     alat_re = r"[ \t]+lattice parameter \(alat\)[ \t]+=[ \t]+([\d.]+)[ \t]+a\.u\."
     basis_head_re = r"[ \t]+crystal axes: \(cart. coord. in units of alat\)"
@@ -81,7 +81,7 @@ def get_init_coord(path):
 
 
 def get_relax_data(path):
-    # type: (path) -> Tuple[str, List[float,...], Union[float, None], Species, Tuple[Tau,...]]
+    # type: (path) -> Tuple[str, List[float,...], Union[float, None], List[np.ndarray], Species, Tuple[Tau,...]]
     """Get geometry and energy data from relaxation.
 
     :param path: Path to pw.x output
@@ -94,34 +94,48 @@ def get_relax_data(path):
         positions: Vector of atomic positions for each step. Does not include
             initial position but includes final position if relaxation finished
     """
+    basis_header_re = re.compile(r"CELL_PARAMETERS \((angstrom)\)")
     geom_header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
     energy_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
     final_energy_re = re.compile(r"[ \t]+Final energy[ \t]+=[ \t]+(-[.\d]+) Ry")
     atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
+    basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
 
-    buffering = False
+    buffer_geom = False
+    buffer_basis = False
     energies = []
     final_energy = None
     geoms = []
+    bases = []
     geom_buf = []
+    basis_buf = []
 
     # Parse the output file
     with open(path) as f:
         for line in f:
-            if buffering:
+            if buffer_geom:
                 if atom_re.match(line):
                     spec, pos = atom_re.match(line).groups()
                     pos = parse_vector(pos)
                     geom_buf.append((spec, pos))
                 else:
-                    buffering = False
+                    buffer_geom = False
                     geoms.append(geom_buf)
                     geom_buf = []
+            elif buffer_basis:
+                if basis_row_re.match(line):
+                    basis_buf.append(parse_vector(line))
+                else:
+                    buffer_basis = False
+                    bases.append(np.array(basis_buf))
+                    basis_buf = []
             else:
                 if energy_re.match(line):
                     energies.append(float(energy_re.match(line).group(1)))
+                elif basis_header_re.match(line):
+                    buffer_basis = True
                 elif geom_header_re.match(line):
-                    buffering = True
+                    buffer_geom = True
                     # Capture the coordinate type
                     geom_buf.append(geom_header_re.match(line).group(1))
                 elif final_energy_re.match(line):
@@ -131,12 +145,12 @@ def get_relax_data(path):
                     pass
 
     # Process geometry buffer to gather species and coordinate types
-    def parse_entry(buf):
+    def parse_geom_buf(buf):
         pos_type = buf[0]
         spec, pos = zip(*buf[1:])
         return pos_type, spec, np.array(pos)
 
-    pos_type, spec, pos = zip(*map(parse_entry, geoms))
+    pos_type, spec, pos = zip(*map(parse_geom_buf, geoms))
 
     def all_equal(l):
         return l.count(l[0]) == len(l)
@@ -144,12 +158,16 @@ def get_relax_data(path):
     assert all_equal(pos_type) and all_equal(spec)
     pos_type, spec = pos_type[0], spec[0]
 
-    return pos_type, energies, final_energy, spec, pos
+    # Process basis buffer
+    if len(bases) > 0:
+        assert len(bases) == len(pos)
+
+    return pos_type, energies, final_energy, bases, spec, pos
 
 
 def parse_relax(path, coord_type='crystal'):
-    # type: (path, str) -> Tuple[Union[None, Tuple[float, Species, Tau]],
-    #                            Tuple[List[float], Species, Tuple[Tau, ...]]]
+    # type: (path, str) -> Tuple[Union[None, Tuple[float, np.ndarray, Species, Tau]],
+    #                            Tuple[List[float], List[np.ndarray], Species, Tuple[Tau, ...]]]
     """Gather data from pw.x relax run.
     
     :param path: path to pw.x output
@@ -158,32 +176,37 @@ def parse_relax(path, coord_type='crystal'):
     :returns:
         final_data: None if relaxation did not finish, else Tuple[energy, species, positions]
             energy: in Rydberg
+            basis: in Angstrom
             species: vector of atomic species
             posititons: shape (natoms, 3), same order as species
-        relax_data: Like final_data except energies and positions are a vector
+        relax_data: Like final_data except energies, bases, and positions are a vector
             with entries for each step
     """
+    from itertools import starmap
     from util import convert_coords
 
     # Run parsers on output
-    alat, basis = get_basis(path)
+    alat, basis_i = get_init_basis(path)
     species_i, pos_i = get_init_coord(path)
-    pos_type, energies, final_e, species, pos = get_relax_data(path)
+    pos_type, energies, final_e, bases, species, pos = get_relax_data(path)
 
     assert species_i == species
 
     # Convert coordinates if needed
-    pos_i = convert_coords(alat, basis, pos_i, 'crystal', coord_type)
-    pos = tuple(map(lambda t: convert_coords(alat, basis, t, pos_type, coord_type), pos))
+    pos_i = convert_coords(alat, basis_i, pos_i, 'crystal', coord_type)
+    basis_steps = (basis_i,) * len(pos) if len(bases) == 0 else tuple(bases)
+    pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, pos_type, coord_type),
+                        zip(basis_steps, pos)))
 
     # Decide if relaxation finished
-    final_data = (final_e, species, pos[-1]) if final_e is not None else None
+    final_data = (final_e, basis_steps[-1], species, pos[-1]) if final_e is not None else None
 
-    # If relaxation finished, pos contains duplicate final position
+    # If relaxation finished, pos and bases contain duplicate final data
     if final_data is not None:
         pos = pos[:-1]
+        basis_steps = basis_steps[:-1]
 
-    relax_data = (energies, species, (pos_i,) + pos)
+    relax_data = (energies, (basis_i,) + basis_steps, species, (pos_i,) + pos)
 
     return final_data, relax_data
 
