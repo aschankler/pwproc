@@ -2,6 +2,31 @@
 import re
 import numpy as np
 
+
+def parser_one_line(line_re, proc_fn, find_multiple=False):
+    # type: (re.Pattern, Callable[[re.Match], T], bool) -> Function[[Iterable[Text]], Union[T, List[T]]]
+    """Generates a parser to look for isolated lines."""
+
+    def parser(lines):
+        # type: (Iterable[Text]) -> Any
+        lines = iter(lines)
+        results = []
+
+        for line in lines:
+            match = line_re.match(line)
+            if match:
+                processed = proc_fn(match)
+                if not find_multiple:
+                    return processed
+                else:
+                    results.append(processed)
+            else:
+                pass
+        return results
+
+    return parser
+
+
 def parse_vector(s, *_, num_re=re.compile(r"[\d.-]+")):
     # type: (Text) -> Tuple[float]
     """Convert a vector string into a tuple."""

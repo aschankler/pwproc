@@ -4,11 +4,15 @@
 ## Usage
 `pwproc` has a number of submodules:
 - `relax` - Extract geometries and energies from structural relaxation using `pw.x`
+- `fermi` - Extract the fermi energy from `pw.x` output
 - `bands` - Band structures using `pw.x` or `bands.x`
 - `template` - Template processor for generating input files
 
 ### relax
 Usage: `pwproc relax [--xsf FILE] [--energy FILE] [--initial|--final] in_file ...`
+
+### fermi
+Usage: `pwproc fermi in_file [in_file ...]`
 
 ### bands
 Usage: `pwproc bands [--bands|--pwx] [--npz FILE] [--csv FILE] in_file`
