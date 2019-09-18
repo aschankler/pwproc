@@ -4,7 +4,7 @@ import numpy as np
 
 
 def parser_one_line(line_re, proc_fn, find_multiple=False):
-    # type: (re.Pattern, Callable[[re.Match], T], bool) -> Function[[Iterable[Text]], Union[T, List[T]]]
+    # type: (re.Pattern, Callable[[re.Match], T], bool) -> Callable[[Iterable[Text]], Union[T, List[T]]]
     """Generates a parser to look for isolated lines."""
 
     def parser(lines):
@@ -20,6 +20,38 @@ def parser_one_line(line_re, proc_fn, find_multiple=False):
                     return processed
                 else:
                     results.append(processed)
+            else:
+                pass
+        return results
+
+    return parser
+
+
+def parser_with_header(header_re, line_re, line_proc, find_multiple=False):
+    # type: (re.Pattern, re.Pattern, Callable[[re.Match], T], bool) -> Callable[[Iterable[Text], T]]
+    """Match a group of lines preceded by a header"""
+
+    def parser(lines):
+        # type: (Iterable[Text]) -> Any
+        lines = iter(lines)
+        capturing = False
+        results = []
+        buffer = []
+
+        for line in lines:
+            if capturing:
+                match = line_re.match(line)
+                if match is not None:
+                    buffer.append(line_proc(match))
+                else:
+                    if find_multiple:
+                        results.append(buffer)
+                        buffer = []
+                        capturing = False
+                    else:
+                        return buffer
+            elif header_re.match(line):
+                capturing = True
             else:
                 pass
         return results

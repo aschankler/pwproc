@@ -13,40 +13,38 @@ from util import parse_vector
 # Tau = np.ndarray[natoms, 3]
 
 
+def get_save_file(path):
+    # (path) -> str
+    """Extract the prefix from pw.x output."""
+    from util import parser_one_line
+
+    save_re = re.compile(r"[ \t]+Writing output data file ([-\w]+).save")
+    save_parser = parser_one_line(save_re, lambda m: m.group(1))
+
+    with open(path) as f:
+        return save_parser(f)
+
+
 def get_init_basis(path):
     # type: (path) -> Tuple[float, np.ndarray]
     """Extracts the initial basis in angstrom from pw.x output."""
-    bohr_to_ang = 0.529177
-    alat_re = r"[ \t]+lattice parameter \(alat\)[ \t]+=[ \t]+([\d.]+)[ \t]+a\.u\."
-    basis_head_re = r"[ \t]+crystal axes: \(cart. coord. in units of alat\)"
-    basis_line_re = r"[ \t]+a\([\d]\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)"
+    from util import parser_one_line, parser_with_header
 
-    found_basis = False
-    i_basis = None
-    alat = None
-    basis = None
+    bohr_to_ang = 0.529177
+    alat_re = re.compile(r"[ \t]+lattice parameter \(alat\)[ \t]+=[ \t]+([\d.]+)[ \t]+a\.u\.")
+    basis_head_re = re.compile(r"[ \t]+crystal axes: \(cart. coord. in units of alat\)")
+    basis_line_re = re.compile(r"[ \t]+a\([\d]\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
+
+    alat_parser = parser_one_line(alat_re, lambda m: float(m.group(1)))
+    basis_parser = parser_with_header(basis_head_re, basis_line_re, lambda m: parse_vector(m.group(1)))
 
     with open(path) as f:
-        for line in f:
-            if found_basis:
-                b_vec = parse_vector(re.match(basis_line_re, line).group(1))
-                basis[i_basis] = b_vec
-                i_basis = i_basis + 1 if i_basis < 2 else None
-                if i_basis is None:
-                    # Assume that alat line precedes basis
-                    break
-            elif re.match(alat_re, line):
-                assert alat is None
-                alat = float(re.match(alat_re, line).group(1))
-            elif re.match(basis_head_re, line):
-                assert basis is None
-                found_basis = True
-                i_basis = 0
-                basis = [None] *3
-            else:
-                pass
+        alat = alat_parser(f)
+        f.seek(0)
+        basis = basis_parser(f)
 
     # Convert basis from alat to angstrom
+    assert len(basis) == 3
     basis = np.array(basis)
     basis *= alat * bohr_to_ang
 
@@ -56,26 +54,17 @@ def get_init_basis(path):
 def get_init_coord(path):
     # type: (path) -> Tuple[Species, Tau]
     """Extracts starting atomic positions in crystal coords."""
+    from util import parser_with_header
+
     header_re = re.compile(r"[ \t]+site n\.[ \t]+atom[ \t]+positions \(cryst\. coord\.\)")
     line_re = re.compile(r"[ \t]+[\d]+[ \t]+([\w]{1,2})[ \t]+tau\([ \d\t]+\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
 
-    capturing = False
-    atoms = []
+    coord_parser = parser_with_header(header_re, line_re, lambda m: m.groups())
 
     with open(path) as f:
-        for line in f:
-            if capturing:
-                m = line_re.match(line)
-                if m is not None:
-                    atoms.append(m.groups())
-                else:
-                    break
-            elif header_re.match(line):
-                capturing = True
-            else:
-                pass
+        atom_coords = coord_parser(f)
 
-    spec, pos = zip(*atoms)
+    spec, pos = zip(*atom_coords)
     pos = np.array(tuple(map(parse_vector, pos)))
 
     return spec, pos
@@ -220,15 +209,3 @@ def parse_relax(path, coord_type='crystal'):
     relax_data = (energies, (basis_i,) + basis_steps, species, (pos_i,) + pos)
 
     return final_data, relax_data
-
-
-def get_save_file(path):
-    # (path) -> str
-    """Extract the prefix from pw.x output."""
-    save_re = re.compile(r"[ \t]+Writing output data file ([-\w]+).save")
-    with open(path) as f:
-        for line in f:
-            if save_re.match(line):
-                return save_re.match(line).group(1)
-            else:
-                pass
