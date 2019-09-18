@@ -12,6 +12,7 @@ from util import parse_vector
 # Position matrix
 # Tau = np.ndarray[natoms, 3]
 
+
 def get_init_basis(path):
     # type: (path) -> Tuple[float, np.ndarray]
     """Extracts the initial basis in angstrom from pw.x output."""
@@ -224,7 +225,7 @@ def parse_relax(path, coord_type='crystal'):
 def get_save_file(path):
     # (path) -> str
     """Extract the prefix from pw.x output."""
-    save_re = re.compile(r"[ \t]+Writing output data file ([-\w]+).save/")
+    save_re = re.compile(r"[ \t]+Writing output data file ([-\w]+).save")
     with open(path) as f:
         for line in f:
             if save_re.match(line):
