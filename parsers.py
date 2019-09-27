@@ -52,22 +52,37 @@ def get_init_basis(path):
 
 
 def get_init_coord(path):
-    # type: (path) -> Tuple[Species, Tau]
-    """Extracts starting atomic positions in crystal coords."""
+    # type: (path) -> Tuple[str, Species, Tau]
+    """Extracts starting atomic positions."""
     from util import parser_with_header
 
-    header_re = re.compile(r"[ \t]+site n\.[ \t]+atom[ \t]+positions \(cryst\. coord\.\)")
+    header_re = re.compile(r"[ \t]+site n\.[ \t]+atom[ \t]+positions \((cryst\. coord\.|alat units)\)")
     line_re = re.compile(r"[ \t]+[\d]+[ \t]+([\w]{1,2})[ \t]+tau\([ \d\t]+\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
 
-    coord_parser = parser_with_header(header_re, line_re, lambda m: m.groups())
+    # Translate the tags in the output header to coordinate types
+    coord_types = {"cryst. coord.": 'crystal', "alat units": 'alat'}
+    # Precedence for coord types when multiple are present
+    ctype_order = ('crystal', 'alat')
+
+    coord_parser = parser_with_header(header_re, line_re, lambda m: m.groups(),
+                                      header_proc=lambda m: m.group(1), find_multiple=True)
 
     with open(path) as f:
-        atom_coords = coord_parser(f)
+        init_coords = {coord_types[c_tag]: coords for c_tag, coords in coord_parser(f)}
+
+    for ct in ctype_order:
+        try:
+            atom_coords = init_coords[ct]
+        except KeyError:
+            pass
+        else:
+            coord_type = ct
+            break
 
     spec, pos = zip(*atom_coords)
     pos = np.array(tuple(map(parse_vector, pos)))
 
-    return spec, pos
+    return coord_type, spec, pos
 
 
 def get_relax_data(path):
@@ -187,13 +202,13 @@ def parse_relax(path, coord_type='crystal'):
 
     # Run parsers on output
     alat, basis_i = get_init_basis(path)
-    species_i, pos_i = get_init_coord(path)
+    ctype_i, species_i, pos_i = get_init_coord(path)
     pos_type, energies, final_e, bases, species, pos = get_relax_data(path)
 
     assert species_i == species
 
     # Convert coordinates if needed
-    pos_i = convert_coords(alat, basis_i, pos_i, 'crystal', coord_type)
+    pos_i = convert_coords(alat, basis_i, pos_i, ctype_i, coord_type)
     basis_steps = (basis_i,) * len(pos) if len(bases) == 0 else tuple(bases)
     pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, pos_type, coord_type),
                         zip(basis_steps, pos)))

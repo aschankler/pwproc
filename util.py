@@ -3,8 +3,13 @@ import re
 import numpy as np
 
 
+# Function type to extract data from match objects
+# matchProcF[T] = Callable[[Match], T]
+# Function to parse file
+# Parser[T] = Callable[[Iterable[Text]], Union[T, List[T]]]
+
 def parser_one_line(line_re, proc_fn, find_multiple=False):
-    # type: (re.Pattern, Callable[[re.Match], T], bool) -> Callable[[Iterable[Text]], Union[T, List[T]]]
+    # type: (Pattern, matchProcF[T], bool) -> Parser[T]
     """Generates a parser to look for isolated lines."""
 
     def parser(lines):
@@ -27,8 +32,8 @@ def parser_one_line(line_re, proc_fn, find_multiple=False):
     return parser
 
 
-def parser_with_header(header_re, line_re, line_proc, find_multiple=False):
-    # type: (re.Pattern, re.Pattern, Callable[[re.Match], T], bool) -> Callable[[Iterable[Text], T]]
+def parser_with_header(header_re, line_re, line_proc, header_proc=None, find_multiple=False):
+    # type: (Pattern, Pattern, matchProcF[T], Optional[matchProcF[S]], bool) -> Parser[Union[List[T], Tuple[S, List[T]]]]
     """Match a group of lines preceded by a header"""
 
     def parser(lines):
@@ -36,6 +41,8 @@ def parser_with_header(header_re, line_re, line_proc, find_multiple=False):
         lines = iter(lines)
         capturing = False
         results = []
+        result = None
+        header = None
         buffer = []
 
         for line in lines:
@@ -44,14 +51,17 @@ def parser_with_header(header_re, line_re, line_proc, find_multiple=False):
                 if match is not None:
                     buffer.append(line_proc(match))
                 else:
+                    result = (header, buffer) if header_proc else buffer
+                    buffer = []
+                    capturing = False
                     if find_multiple:
-                        results.append(buffer)
-                        buffer = []
-                        capturing = False
+                        results.append(result)
                     else:
-                        return buffer
+                        return result
             elif header_re.match(line):
                 capturing = True
+                if header_proc is not None:
+                    header = header_proc(header_re.match(line))
             else:
                 pass
         return results
@@ -89,10 +99,15 @@ def convert_coords(alat, basis, tau, in_type, out_type):
 
 def to_crystal(alat, basis, tau, in_type):
     # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
+    from scipy import constants
+    bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
+
     if in_type == 'crystal':
         return tau
+    elif in_type == 'alat':
+        return alat * bohr_to_ang * tau @ np.linalg.inv(basis)
     elif in_type == 'angstrom':
-        return (np.linalg.inv(basis.T) @ tau.T).T
+        return tau @ np.linalg.inv(basis)
     else:
         raise ValueError("Coord. type {}".format(in_type))
 
