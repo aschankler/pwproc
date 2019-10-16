@@ -28,10 +28,13 @@ def gen_xsf(basis, species, tau, write_header=True, step=None):
 
 def gen_xsf_animate(basis, species, tau):
     # type: (Sequence[basis], Species, Sequence[Tau]) -> Iterator[Text]
+    from itertools import chain
 
     nsteps = len(basis)
     yield 'ANIMSTEPS {}\n'.format(nsteps)
     yield 'CRYSTAL\n'
 
-    for i in range(nsteps):
-        gen_xsf(basis[i], species, tau[i], write_header=False, step=(i+1))
+    yield from chain(*(gen_xsf(basis[i], species, tau[i],
+                               write_header=False, step=(i+1))
+                       for i in range(nsteps)))
+

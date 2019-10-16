@@ -154,7 +154,6 @@ def get_relax_data(path):
     # If vc-relax, the true final energy is run in a new scf calculation
     if final_energy is not None:
         if final_type == 'enthalpy':
-            final_energy = energies[-1]
             energies = energies[:-1]
         else:
             assert final_type == 'energy'
@@ -220,6 +219,14 @@ def parse_relax(path, coord_type='crystal'):
     if final_data is not None:
         pos = pos[:-1]
         basis_steps = basis_steps[:-1]
+    else:
+        # If the relaxation was interupted, there may be an extra position entry
+        if len(energies) == len(pos):
+            # Extra entry after adding the initial coords
+            pos = pos[:-1]
+            basis_steps = basis_steps[:-1]
+        else:
+            assert(len(energies) == len(pos) + 1)
 
     relax_data = (energies, (basis_i,) + basis_steps, species, (pos_i,) + pos)
 

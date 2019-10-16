@@ -6,67 +6,7 @@ import numpy as np
 
 from argparse import ArgumentParser
 from pwproc.parsers import parse_relax, get_save_file
-
-
-class RelaxData:
-    """Data about a relaxation run.
-
-    prefix: str
-        Calculation prefix
-    endpoint: str
-        If None, object contains full relax information, else must be 'final'
-        or 'initial'
-    basis: np.ndarray
-        Crystal basis in angstrom
-    energy: List[float]
-        Energy in Ry
-    species: Tuple[str, ...]
-        Atomic species present
-    tau: np.ndarray
-        Atomic positions in crystal basis
-    """
-    prefix = None
-    endpoint = None
-    basis = None
-    energy = None
-    species = None
-    tau = None
-
-    def __init__(self, **kw):
-        for k, v in kw.items():
-            if hasattr(self, k):
-                setattr(self, k, v)
-            else:
-                raise ValueError("Attr: " + k)
-
-    def get_init(self):
-        from copy import copy
-        assert self.endpoint is None
-        new_obj = copy(self)
-        new_obj.energy = self.energy[0]
-        new_obj.basis = self.basis[0]
-        new_obj.tau = self.tau[0]
-        new_obj.endpoint = 'initial'
-        return new_obj
-
-    def __or__(self, other):
-        """Overloaded to join data."""
-        from copy import copy
-        assert isinstance(other, self.__class__)
-        assert self.prefix == other.prefix
-        assert self.species == other.species
-        assert self.endpoint is None and other.endpoint is None
-        new_energy = self.energy + other.energy
-        new_tau = self.tau + other.tau
-        new_obj = copy(self)
-        new_obj.energy = new_energy
-        new_obj.basis = self.basis + other.basis
-        new_obj.tau = new_tau
-
-        return new_obj
-
-    def __len__(self):
-        return len(self.tau) if self.endpoint is None else 1
+from geometry.data import GeometryData, RelaxData
 
 
 def parse_file(path):
@@ -76,11 +16,9 @@ def parse_file(path):
     if final is None:
         final_data = None
     else:
-        final_data = RelaxData(prefix=prefix, basis=final[1], energy=final[0],
-                               species=final[2], tau=final[3], endpoint='final')
+        final_data = GeometryData(prefix, final[1], final[2], final[3], energy=final[0])
 
-    relax_data = RelaxData(prefix=prefix, basis=relax[1], energy=relax[0],
-                           species=relax[2], tau=relax[3])
+    relax_data = RelaxData(prefix, relax[1], relax[2], relax[3], energy=relax[0])
 
     return (prefix, final_data, relax_data)
 
@@ -108,35 +46,6 @@ def parse_files(paths):
                 data[prefix] = (final, old_relax | relax)
 
     return data
-
-
-def gen_xsf(data):
-    from geometry.format_util import format_basis, format_tau
-
-    # Check if we are animating
-    animate = data.endpoint is None
-    nat = len(data.species)
-    nsteps = len(data)
-
-    if animate:
-        yield 'ANIMSTEPS {}\n'.format(nsteps)
-
-    yield 'CRYSTAL\n'
-
-
-    if not animate:
-        yield 'PRIMVEC\n'
-        yield format_basis(data.basis) + '\n'
-        yield 'PRIMCOORD\n'
-        yield "{} 1\n".format(nat)
-        yield format_tau(data.species, data.tau) + '\n'
-    else:
-        for i in range(nsteps):
-            yield 'PRIMVEC {}\n'.format(i+1)
-            yield format_basis(data.basis[i]) + '\n'
-            yield 'PRIMCOORD {}\n'.format(i+1)
-            yield "{} 1\n".format(nat)
-            yield format_tau(data.species, data.tau[i]) + '\n'
 
 
 def parse_args(args):
@@ -175,7 +84,7 @@ if __name__ == '__main__':
     # Write XSF file
     def save_xsf(path, data):
         with open(path, 'w') as f:
-            f.writelines(gen_xsf(data))
+            f.writelines(data.to_xsf())
 
     if args.xsf is not None:
         if '{PREFIX}' not in args.xsf:

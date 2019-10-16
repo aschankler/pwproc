@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR=$(dirname "$(readlink -f "$0")")
-PYTHONPATH="$DIR/geometry:$DIR/pwproc:$PYTHONPATH"
+export PYTHONPATH="$DIR"
 
 case "$1" in
 
