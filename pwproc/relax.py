@@ -5,7 +5,7 @@ Parser for pw.x relax output.
 import numpy as np
 
 from argparse import ArgumentParser
-from parsers import parse_relax, get_save_file
+from pwproc.parsers import parse_relax, get_save_file
 
 
 class RelaxData:
@@ -111,7 +111,7 @@ def parse_files(paths):
 
 
 def gen_xsf(data):
-    from format_util import format_basis, format_tau
+    from geometry.format_util import format_basis, format_tau
 
     # Check if we are animating
     animate = data.endpoint is None

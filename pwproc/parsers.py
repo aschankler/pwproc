@@ -5,7 +5,7 @@ Parsers for pw.x output.
 import re
 import numpy as np
 
-from util import parse_vector
+from pwproc.util import parse_vector
 
 # Vector of atomic species
 # Species = Tuple[str, ...]
@@ -16,7 +16,7 @@ from util import parse_vector
 def get_save_file(path):
     # (path) -> str
     """Extract the prefix from pw.x output."""
-    from util import parser_one_line
+    from pwproc.util import parser_one_line
 
     save_re = re.compile(r"[ \t]+Writing output data file ([-.\w]+).save")
     save_parser = parser_one_line(save_re, lambda m: m.group(1))
@@ -28,7 +28,7 @@ def get_save_file(path):
 def get_init_basis(path):
     # type: (path) -> Tuple[float, np.ndarray]
     """Extracts the initial basis in angstrom from pw.x output."""
-    from util import parser_one_line, parser_with_header
+    from pwproc.util import parser_one_line, parser_with_header
 
     bohr_to_ang = 0.529177
     alat_re = re.compile(r"[ \t]+lattice parameter \(alat\)[ \t]+=[ \t]+([\d.]+)[ \t]+a\.u\.")
@@ -54,7 +54,7 @@ def get_init_basis(path):
 def get_init_coord(path):
     # type: (path) -> Tuple[str, Species, Tau]
     """Extracts starting atomic positions."""
-    from util import parser_with_header
+    from pwproc.util import parser_with_header
 
     header_re = re.compile(r"[ \t]+site n\.[ \t]+atom[ \t]+positions \((cryst\. coord\.|alat units)\)")
     line_re = re.compile(r"[ \t]+[\d]+[ \t]+([\w]{1,2})[ \t]+tau\([ \d\t]+\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
@@ -198,7 +198,7 @@ def parse_relax(path, coord_type='crystal'):
             with entries for each step
     """
     from itertools import starmap
-    from util import convert_coords
+    from pwproc.util import convert_coords
 
     # Run parsers on output
     alat, basis_i = get_init_basis(path)

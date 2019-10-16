@@ -5,7 +5,7 @@ Parser for pw.x bands output files.
 import numpy as np
 import re
 
-from util import parse_vector
+from pwproc.util import parse_vector
 
 
 def group(it, n):
