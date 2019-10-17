@@ -17,6 +17,10 @@ geometry)
     shift
     $DIR/get_geom.sh $@
     ;;
+scf)
+    shift
+    python3 $DIR/pwproc/scf.py $@
+    ;;
 relax)
     shift
     python3 $DIR/pwproc/relax.py $@
@@ -30,7 +34,7 @@ bands)
     python3 $DIR/pwproc/bands.py $@
     ;;
 *)
-    echo "Available modes are 'template,' 'energy,' 'geometry', 'relax', 'fermi' and 'bands'"
+    echo "Available modes are 'template,' 'energy,' 'geometry', 'scf', 'relax', 'fermi' and 'bands'"
     exit 1
     ;;
 esac
