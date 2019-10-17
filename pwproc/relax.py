@@ -2,14 +2,12 @@
 Parser for pw.x relax output.
 """
 
-import numpy as np
-
-from argparse import ArgumentParser
-from pwproc.parsers import parse_relax, get_save_file
 from geometry.data import GeometryData, RelaxData
 
 
 def parse_file(path):
+    from pwproc.parsers import parse_relax, get_save_file
+
     final, relax = parse_relax(path, coord_type='angstrom')
     prefix = get_save_file(path)
 
@@ -48,7 +46,41 @@ def parse_files(paths):
     return data
 
 
+def write_energy(e_file, data):
+    # type: (Text, Mapping[str, GeometryData]) -> None
+    """Write energy data to file."""
+    with open(e_file, 'w') as f:
+        for prefix, dat in data.items():
+            if type(dat) is RelaxData:
+                f.write(prefix + '\n')
+                for e in dat.energy:
+                    f.write('{}\n'.format(e))
+            else:
+                f.write("{}: {}\n".format(prefix, dat.energy))
+
+
+def write_xsf(xsf, data):
+    # type: (Text, Mapping[str, GeometryData]) -> None
+    """Write structure data to xsf files."""
+
+    if '{PREFIX}' not in xsf:
+        if len(data) > 1:
+            raise ValueError('Saving multiple structures to same file')
+        else:
+            # Grab the first (and only) entry
+            save_data = zip((xsf,), data.values())
+    else:
+        save_data = ((xsf.format(PREFIX=pref), geom_data)
+                     for pref, geom_data in data.items())
+
+    for path, geom_data in save_data:
+        with open(path, 'w') as xsf_f:
+            xsf_f.writelines(geom_data.to_xsf())
+
+
 def parse_args(args):
+    """Argument parser for `relax` subcommand."""
+    from argparse import ArgumentParser
     parser = ArgumentParser(prog='pwproc relax')
 
     parser.add_argument('in_file', action='store', nargs='+')
@@ -61,10 +93,8 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-if __name__ == '__main__':
-    import sys
-    args = parse_args(sys.argv[1:])
-
+def relax(args):
+    """Main function for `relax` subcommand."""
     # Parse the output files
     relax_data = parse_files(args.in_file)
 
@@ -82,30 +112,16 @@ if __name__ == '__main__':
             relax_data[pref] = relax
 
     # Write XSF file
-    def save_xsf(path, data):
-        with open(path, 'w') as f:
-            f.writelines(data.to_xsf())
-
-    if args.xsf is not None:
-        if '{PREFIX}' not in args.xsf:
-            if len(relax_data) > 1:
-                raise ValueError('Saving multiple structures to same file')
-            else:
-                # Grab the first (and only) entry
-                data = next(iter(relax_data.values()))
-                save_xsf(args.xsf, data)
-        else:
-            for prefix, data in relax_data.items():
-                save_xsf(args.xsf.format(PREFIX=prefix), data)
+    if args.xsf:
+        write_xsf(args.xsf, relax_data)
 
     # Write energy
-    if args.energy is not None:
-        with open(args.energy, 'w') as f:
-            for pref in relax_data:
-                energy = relax_data[pref].energy
-                if args.endpoint is not None:
-                    f.write("{}: {}\n".format(pref, energy))
-                else:
-                    f.write(pref + '\n')
-                    for e in energy:
-                        f.write('{}\n'.format(e))
+    if args.energy:
+        write_energy(args.energy, relax_data)
+
+
+if __name__ == '__main__':
+    import sys
+    args = parse_args(sys.argv[1:])
+    relax(args)
+

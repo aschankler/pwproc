@@ -111,7 +111,7 @@ def kpath_coord(kpt_list):
 def parse_args(args):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(prog='pwproc bands')
 
     parser.add_argument('in_file', action='store')
     in_grp = parser.add_mutually_exclusive_group()

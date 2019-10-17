@@ -17,7 +17,7 @@ def find_fermi(path):
 def parse_args(args):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(prog='pwproc fermi')
 
     parser.add_argument('in_file', action='store', nargs='+')
 
