@@ -18,14 +18,16 @@ class GeometryData:
     _species = None
     _tau = None
     _energy = None
+    _coord_type = None
 
-    def __init__(self, prefix, basis, species, tau, energy=None):
+    def __init__(self, prefix, basis, species, tau, energy=None, coord_type=None):
         self.prefix = prefix
         self.basis = basis
         self.species = species
         self.tau = tau
         if energy:
             self.energy = energy
+        self._coord_type = coord_type if coord_type else 'angstrom'
 
     @property
     def prefix(self):
@@ -34,6 +36,16 @@ class GeometryData:
     @prefix.setter
     def prefix(self, pref):
         self._prefix = pref
+
+    @property
+    def coord_type(self):
+        return self._coord_type
+
+    @coord_type.setter
+    def coord_type(self, new_coord):
+        from pwproc.util import convert_coords
+        self.tau = convert_coords(1.0, self.basis, self.tau, self.coord_type, new_coord)
+        self._coord_type = new_coord
 
     @property
     def basis(self):
@@ -75,12 +87,18 @@ class GeometryData:
 
     @classmethod
     def from_poscar(cls, poscar):
-        """"""
+        """Initialize structure from poscar file"""
         from geometry.poscar import read_poscar
         with open(poscar) as f:
             pref, _, basis, species, tau = read_poscar(f.readlines())
 
         return cls(pref, basis, species, tau)
+
+    def with_coords(self, new_coords):
+        from copy import deepcopy
+        new_obj = deepcopy(self)
+        new_obj.coord_type = new_coords
+        return new_obj
 
     def to_xsf(self):
         from geometry.xsf import gen_xsf
@@ -111,6 +129,14 @@ class RelaxData(GeometryData):
             return len(self.energy)
         else:
             return None
+
+    @GeometryData.coord_type.setter
+    def coord_type(self, new_coords):
+        from pwproc.util import convert_coords
+
+        self.tau = tuple(convert_coords(1.0, b, t, self.coord_type, new_coord)
+                         for b, t in zip(self.basis, self.tau))
+        self._coord_type = new_coord
 
     @GeometryData.basis.setter
     def basis(self, b):
