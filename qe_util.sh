@@ -9,14 +9,6 @@ template)
     shift
     python3 $DIR/template_sub.py $@
     ;;
-energy)
-    shift
-    $DIR/get_energy.sh $@
-    ;;
-geometry)
-    shift
-    $DIR/get_geom.sh $@
-    ;;
 scf)
     shift
     python3 $DIR/pwproc/scf.py $@
@@ -34,7 +26,7 @@ bands)
     python3 $DIR/pwproc/bands.py $@
     ;;
 *)
-    echo "Available modes are 'template,' 'energy,' 'geometry', 'scf', 'relax', 'fermi' and 'bands'"
+    echo "Available modes are 'template,' 'scf', 'relax', 'fermi' and 'bands'"
     exit 1
     ;;
 esac
