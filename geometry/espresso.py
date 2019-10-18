@@ -19,11 +19,11 @@ def gen_pwi(basis, species, pos, coord_type):
     from geometry.format_util import format_basis, format_tau
 
     # Yield basis
-    yield "CELL_PARAMETERS {}".format("angstrom")
+    yield "CELL_PARAMETERS {}\n".format("angstrom")
     yield format_basis(basis)
     yield "\n\n"
 
     # Yield atomic positions
-    yield "ATOMIC_POSITIONS {}".format(coord_type)
+    yield "ATOMIC_POSITIONS {}\n".format(coord_type)
     yield format_tau(species, pos)
 
