@@ -86,11 +86,10 @@ class GeometryData:
         self._energy = e
 
     @classmethod
-    def from_poscar(cls, poscar):
+    def from_poscar(cls, lines):
         """Initialize structure from poscar file"""
         from geometry.poscar import read_poscar
-        with open(poscar) as f:
-            pref, _, basis, species, tau = read_poscar(f.readlines())
+        pref, _, basis, species, tau = read_poscar(lines)
 
         return cls(pref, basis, species, tau)
 
