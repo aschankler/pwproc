@@ -1,23 +1,23 @@
 
-import os
-
 #from argparse import Namespace
 #from typing import Iterable, Mapping, Any
+#Substitutions = Mapping[str, str]
 
 
 def parse_args(args):
     # type: (Iterable[str]) -> Namespace
     from argparse import ArgumentParser, Action
+    from pathlib import Path
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(prog="pwproc template" )
 
     # Set in/out file names
     parser.add_argument('in_file')
     parser.add_argument('out_file', nargs='?')
 
-    # Set optional args
+    # Set locations to load variables
     parser.add_argument('--use_env', action='store_true')
-    parser.add_argument('--use_file', '-f', action='append')
+    parser.add_argument('--use_file', '-f', action='append', type=Path)
 
     # Collect command line vars
     class ParseVar(Action):
@@ -46,42 +46,66 @@ def parse_args(args):
 
 
 def substitute(tmplt_str, subs):
-    # type: (str, Mapping[str, str]) -> str
+    # type: (str, Substitutions) -> str
     from string import Template
     
     template = Template(tmplt_str)
     return template.substitute(subs)
 
 
-def load_file(filename):
-    # type: (str) -> Mapping[str, Any]
-    module = os.path.splitext(os.path.basename(filename))[0]
-    ctx = dict(__file__=filename, __name__=module)
+def load_file(path):
+    # type: (Path) -> Substitutions
+    """Evaluate file and capture variables defined on the main namespace."""
 
-    with open(filename, 'r') as f:
+    module = path.parent.name
+    ctx = dict(__file__=str(path), __name__=module)
+
+    with open(path) as f:
         source = f.read()
 
-    code = compile(source, filename, 'exec')
+    code = compile(source, str(path), 'exec')
     exec(code, ctx)
 
-    return {k: v for k, v in ctx.items() if not k.startswith('_')}
+    return {k: v for k, v in ctx.items() if (not k.startswith('_')) and (type(v) is str)}
+
+
+def update_subs(sub_dict, files=None, use_env=False):
+    # type: (Substitutions, Optional[Iterable[Path]], bool) -> Substitutions
+    """Updates substitution dict from files and env.
+     Priority is cmdline args > vars from file > vars from env.
+    """
+    import os
+
+    # Capture vars from environment
+    if use_env:
+        env_subs = {k: v for k, v in os.environ.items() if not k.startswith('_')}
+    else:
+        env_subs = {}
+
+    # Load vars from files
+    file_subs = {}
+    if files is not None:
+        for f in files:
+            file_subs.update(load_file(f))
+
+    # Update the provided substitutions
+    new_subs = env_subs
+    new_subs.update(file_subs)
+    new_subs.update(sub_dict)
+
+    return new_subs
 
 
 def template(args):
     # type: (Namespace) -> None
     import sys
 
-    if args.use_env:
-        args.vars.update(os.environ)
-
-    if args.use_file is not None:
-        for f in args.use_file:
-            args.vars.update(load_file(f))
+    substitutions = update_subs(args.vars, args.use_file, args.use_env)
 
     with open(args.in_file, 'r') as f:
         tmpl = f.read()
 
-    out_str = substitute(tmpl, args.vars)
+    out_str = substitute(tmpl, substitutions)
 
     if args.out_file is None:
         sys.stdout.write(out_str)
