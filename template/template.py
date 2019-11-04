@@ -6,14 +6,15 @@
 
 def parse_args(args):
     # type: (Iterable[str]) -> Namespace
-    from argparse import ArgumentParser, Action
+    import sys
+    from argparse import ArgumentParser, Action, FileType
     from pathlib import Path
 
     parser = ArgumentParser(prog="pwproc template" )
 
-    # Set in/out file names
-    parser.add_argument('in_file')
-    parser.add_argument('out_file', nargs='?')
+    # Get in/out file handles
+    parser.add_argument('in_file', nargs='?', type=FileType('r'), default=sys.stdin)
+    parser.add_argument('out_file', nargs='?', type=FileType('w'), default=sys.stdout)
 
     # Set locations to load variables
     parser.add_argument('--use_env', action='store_true')
@@ -98,20 +99,20 @@ def update_subs(sub_dict, files=None, use_env=False):
 
 def template(args):
     # type: (Namespace) -> None
-    import sys
 
+    # Get substitutions from all sources
     substitutions = update_subs(args.vars, args.use_file, args.use_env)
 
-    with open(args.in_file, 'r') as f:
-        tmpl = f.read()
+    # Read the template from input
+    tmpl = args.in_file.read()
 
+    # Do the substitution and write result
     out_str = substitute(tmpl, substitutions)
+    args.out_file.write(out_str)
 
-    if args.out_file is None:
-        sys.stdout.write(out_str)
-    else:
-        with open(args.out_file, 'w') as f:
-            f.write(out_str)
+    # Close in/out files
+    args.in_file.close()
+    args.out_file.close()
 
 
 if __name__ == '__main__':
