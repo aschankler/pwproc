@@ -7,7 +7,7 @@ case "$1" in
 
 template)
     shift
-    python3 $DIR/template_sub.py $@
+    python3 $DIR/template/template.py $@
     ;;
 scf)
     shift
