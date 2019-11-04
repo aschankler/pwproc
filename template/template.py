@@ -1,5 +1,4 @@
 
-import sys
 import os
 
 #from argparse import Namespace
@@ -68,8 +67,9 @@ def load_file(filename):
     return {k: v for k, v in ctx.items() if not k.startswith('_')}
 
 
-if __name__ == '__main__':
-    args = parse_args(sys.argv[1:])
+def template(args):
+    # type: (Namespace) -> None
+    import sys
 
     if args.use_env:
         args.vars.update(os.environ)
@@ -88,3 +88,11 @@ if __name__ == '__main__':
     else:
         with open(args.out_file, 'w') as f:
             f.write(out_str)
+
+
+if __name__ == '__main__':
+    import sys
+    args = parse_args(sys.argv[1:])
+
+    template(args)
+
