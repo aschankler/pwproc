@@ -59,7 +59,7 @@ def parse_args(args):
 
 
 def scf(args):
-    """"""
+    """Main program for `scf` subcommand"""
     data = {}
     for p in args.in_file:
         geom = parse_scf(p, coord_type='angstrom')
