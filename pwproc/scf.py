@@ -47,12 +47,16 @@ def parse_scf(path, coord_type='crystal'):
 def parse_args(args):
     """Argument parser for `scf` subcommand."""
     from argparse import ArgumentParser, FileType
-    parser = ArgumentParser(prog='pwproc scf')
+    parser = ArgumentParser(prog='pwproc scf',
+                            description="Parser for scf and nscf calculations")
 
-    parser.add_argument('in_file', action='store', nargs='+')
-    parser.add_argument('--xsf', action='store', metavar='FILE')
-    parser.add_argument('--energy', nargs='?', type=FileType('w'),
-                        const=sys.stdout, metavar='FILE')
+    parser.add_argument('in_file', action='store', nargs='+',
+                        help="List of pw.x output files")
+    parser.add_argument('--xsf', action='store', metavar='FILE',
+                        help="Write xsf structures to file. The key `{PREFIX}` in FILE" \
+                        " is substituted for the calculation prefix")
+    parser.add_argument('--energy', nargs='?', type=FileType('w'), const=sys.stdout,
+                        metavar='FILE', help="Write energy to file (in Ry)")
 
     return parser.parse_args(args)
 

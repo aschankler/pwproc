@@ -111,15 +111,22 @@ def kpath_coord(kpt_list):
 def parse_args(args):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(prog='pwproc bands')
+    parser = ArgumentParser(prog='pwproc bands',
+                            description="Parse output from bands.x and pw.x")
 
-    parser.add_argument('in_file', action='store')
+    parser.add_argument('in_file', action='store', help="pw.x or bands.x output file")
     in_grp = parser.add_mutually_exclusive_group()
-    in_grp.add_argument('--bands', action='store_const', const='bands', dest='in_type')
-    in_grp.add_argument('--pwx', action='store_const', const='pwx', dest='in_type')
-    out_grp = parser.add_argument_group('Output type')
-    out_grp.add_argument('--npz', action='store')
-    out_grp.add_argument('--csv', action='store')
+    in_grp.add_argument('--bands', action='store_const', const='bands', dest='in_type',
+                        help="Output is from bands.x")
+    in_grp.add_argument('--pwx', action='store_const', const='pwx', dest='in_type',
+                        help="Output is from pw.x (default)")
+    out_grp = parser.add_argument_group(title='Output',
+                         description="Output files record kpoint coordinates, band" \
+                         " energies, and progress on a continuous path coordinate")
+    out_grp.add_argument('--npz', action='store', metavar="FILE",
+                         help="Write data in npz format")
+    out_grp.add_argument('--csv', action='store', metavar="FILE",
+                         help="Write data to csv file")
 
     return parser.parse_args(args)
 

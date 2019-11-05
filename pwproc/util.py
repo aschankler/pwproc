@@ -1,3 +1,7 @@
+"""
+Utilities for use througout the program. Defines parser generators
+and coordinate transformations.
+"""
 
 import re
 import numpy as np
@@ -7,6 +11,7 @@ import numpy as np
 # matchProcF[T] = Callable[[Match], T]
 # Function to parse file
 # Parser[T] = Callable[[Iterable[Text]], Union[T, List[T]]]
+
 
 def parser_one_line(line_re, proc_fn, find_multiple=False):
     # type: (Pattern, matchProcF[T], bool) -> Parser[T]

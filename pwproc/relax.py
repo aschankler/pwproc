@@ -81,14 +81,21 @@ def write_xsf(xsf, data):
 def parse_args(args):
     """Argument parser for `relax` subcommand."""
     from argparse import ArgumentParser
-    parser = ArgumentParser(prog='pwproc relax')
+    parser = ArgumentParser(prog='pwproc relax',
+                            description="Parser for relax and vc-relax output")
 
-    parser.add_argument('in_file', action='store', nargs='+')
-    parser.add_argument('--xsf', action='store', metavar='FILE')
-    parser.add_argument('--energy', action='store', metavar='FILE')
+    parser.add_argument('in_file', action='store', nargs='+', help="List of pw.x output files")
+    parser.add_argument('--xsf', action='store', metavar='FILE',
+                        help="Write xsf structures to file. The key `{PREFIX}` in FILE" \
+                        " is replaced by the calculation prefix")
+    parser.add_argument('--energy', action='store', metavar='FILE',
+                        help="Write energy to file (in Ry)")
     endpt = parser.add_mutually_exclusive_group()
-    endpt.add_argument('--final', dest='endpoint', action='store_const', const='final')
-    endpt.add_argument('--initial', dest='endpoint', action='store_const', const='initial')
+    endpt.add_argument('--final', dest='endpoint', action='store_const', const='final',
+                       help="Save data only for the final structure. Warn if" \
+                       " relaxation did not finish")
+    endpt.add_argument('--initial', dest='endpoint', action='store_const', const='initial',
+                       help="Save data only for the initial structure")
 
     return parser.parse_args(args)
 
