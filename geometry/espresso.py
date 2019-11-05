@@ -11,19 +11,21 @@ def read_pwi(lines):
     raise NotImplementedError
 
 
-def gen_pwi(basis, species, pos, coord_type):
-    # type: (Basis, Species, Tau, str) -> Iterator[Text]
+def gen_pwi(basis, species, pos, coord_type, write_cell=True, write_pos=True):
+    # type: (Basis, Species, Tau, str, bool, bool) -> Iterator[Text]
     """Generate the `CELL_PARAMETERS` and `ATOMIC_POSITIONS` cards.
     Basis is assumed to be in angstroms and tau should agree with `coord_type`
     """
     from geometry.format_util import format_basis, format_tau
 
     # Yield basis
-    yield "CELL_PARAMETERS {}\n".format("angstrom")
-    yield format_basis(basis)
-    yield "\n\n"
+    if write_cell:
+        yield "CELL_PARAMETERS {}\n".format("angstrom")
+        yield format_basis(basis)
+        yield "\n\n"
 
     # Yield atomic positions
-    yield "ATOMIC_POSITIONS {}\n".format(coord_type)
-    yield format_tau(species, pos)
+    if write_pos:
+        yield "ATOMIC_POSITIONS {}\n".format(coord_type)
+        yield format_tau(species, pos)
 
