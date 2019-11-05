@@ -64,7 +64,7 @@ def write_xsf(xsf, data):
     """Write structure data to xsf files."""
 
     if '{PREFIX}' not in xsf:
-        if len(data) > 1:
+        if len(data) != 1:
             raise ValueError('Saving multiple structures to same file')
         else:
             # Grab the first (and only) entry
@@ -99,25 +99,26 @@ def relax(args):
     relax_data = parse_files(args.in_file)
 
     # Take the desired step
-    for pref, data in relax_data.items():
+    out_data = {}
+    for prefix, data in relax_data.items():
         final, relax = data
         if args.endpoint == 'final':
-            if data[0] is None:
-                raise ValueError('Relaxation did not finish for {}'.format(pref))
+            if final is None:
+                 print('Relaxation did not finish for {}'.format(prefix))
             else:
-                relax_data[pref] = final
+                out_data[prefix] = final
         elif args.endpoint == 'initial':
-            relax_data[pref] = relax.get_init()
+            out_data[prefix] = relax.get_init()
         else:
-            relax_data[pref] = relax
+            ou_data[prefix] = relax
 
     # Write XSF file
     if args.xsf:
-        write_xsf(args.xsf, relax_data)
+        write_xsf(args.xsf, out_data)
 
     # Write energy
     if args.energy:
-        write_energy(args.energy, relax_data)
+        write_energy(args.energy, out_data)
 
 
 if __name__ == '__main__':
