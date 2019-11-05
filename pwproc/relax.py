@@ -2,7 +2,7 @@
 Parser for pw.x relax output.
 """
 
-from geometry.data import GeometryData, RelaxData
+from pwproc.geometry import GeometryData, RelaxData
 
 
 def parse_file(path):

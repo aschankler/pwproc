@@ -16,7 +16,7 @@ def gen_pwi(basis, species, pos, coord_type, write_cell=True, write_pos=True):
     """Generate the `CELL_PARAMETERS` and `ATOMIC_POSITIONS` cards.
     Basis is assumed to be in angstroms and tau should agree with `coord_type`
     """
-    from geometry.format_util import format_basis, format_tau
+    from pwproc.geometry.format_util import format_basis, format_tau
 
     # Yield basis
     if write_cell:

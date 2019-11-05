@@ -41,7 +41,7 @@ def read_poscar(lines):
 
 def gen_poscar(basis, species, pos, name=None, alat=1.0):
     # type: (Basis, Species, Tau, Optional[Text], Float) -> Iterator[Text]
-    from geometry.format_util import format_basis, columns, FORMAT_POS
+    from pwproc.geometry.format_util import format_basis, columns, FORMAT_POS
 
     # Write the basis information
     name = "POSCAR" if name is None else name

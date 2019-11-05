@@ -90,7 +90,7 @@ def read_xsf(lines):
 
 def gen_xsf(basis, species, tau, write_header=True, step=None):
     # type: (Basis, Species, Tau, bool) -> Iterator[Text]
-    from geometry.format_util import format_basis, format_tau
+    from pwproc.geometry.format_util import format_basis, format_tau
 
     nat = len(species)
 

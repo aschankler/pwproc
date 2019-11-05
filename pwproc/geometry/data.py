@@ -88,7 +88,7 @@ class GeometryData:
     @classmethod
     def from_poscar(cls, lines):
         """Initialize structure from poscar file"""
-        from geometry.poscar import read_poscar
+        from pwproc.geometry import read_poscar
         pref, _, basis, species, tau = read_poscar(lines)
 
         return cls(pref, basis, species, tau)
@@ -100,7 +100,7 @@ class GeometryData:
         return new_obj
 
     def to_xsf(self):
-        from geometry.xsf import gen_xsf
+        from pwproc.geometry import gen_xsf
         return gen_xsf(self.basis, self.species, self.tau)
 
 
@@ -182,5 +182,5 @@ class RelaxData(GeometryData):
         return GeometryData(self.prefix, self.basis[0], self.species, self.tau[0], self.energy[0])
 
     def to_xsf(self):
-        from geometry.xsf import gen_xsf_animate
+        from pwproc.geometry import gen_xsf_animate
         return gen_xsf_animate(self.basis, self.species, self.tau)
