@@ -36,6 +36,7 @@ def parse_args(args):
                 setattr(namespace, self.dest, var_list)
 
     parser.add_argument('--var', '-v', action=ParseVar, dest='vars', metavar='VAR=VALUE')
+    parser.add_argument('--paste', '-p', action=ParseVar, dest='paste_files', metavar='VAR=FILE')
 
     parsed = parser.parse_args(args)
     try:
@@ -70,8 +71,8 @@ def load_file(path):
     return {k: v for k, v in ctx.items() if (not k.startswith('_')) and (type(v) is str)}
 
 
-def update_subs(sub_dict, files=None, use_env=False):
-    # type: (Substitutions, Optional[Iterable[Path]], bool) -> Substitutions
+def update_subs(sub_dict, files=None, paste_files=None, use_env=False):
+    # type: (Substitutions, Optional[Iterable[Path]], Optional[Mapping[str, Path]], bool) -> Substitutions
     """Updates substitution dict from files and env.
      Priority is cmdline args > vars from file > vars from env.
     """
@@ -89,9 +90,19 @@ def update_subs(sub_dict, files=None, use_env=False):
         for f in files:
             file_subs.update(load_file(f))
 
+    # Load the paste files
+    if paste_files:
+        paste_subs = {}
+        for k, p in paste_files:
+            with open(p) as f:
+                paste_subs[k] = f.read()
+    else:
+        paste_subs = {}
+
     # Update the provided substitutions
     new_subs = env_subs
     new_subs.update(file_subs)
+    new_subs.update(paste_subs)
     new_subs.update(sub_dict)
 
     return new_subs
@@ -101,7 +112,7 @@ def template(args):
     # type: (Namespace) -> None
 
     # Get substitutions from all sources
-    substitutions = update_subs(args.vars, args.use_file, args.use_env)
+    substitutions = update_subs(args.vars, args.use_file, args.paste_files, args.use_env)
 
     # Read the template from input
     tmpl = args.in_file.read()
