@@ -1,24 +1,28 @@
-"""
-Utilities for use througout the program. Defines parser generators
-and coordinate transformations.
+"""Utilities for use througout the program.
+
+Defines parser generators and coordinate transformations.
 """
 
 import re
 import numpy as np
 
+from typing import Callable, Iterable, Match, Optional, Pattern, Sequence, \
+                   Tuple, TypeVar, Union
 
+S = TypeVar('S')
+T = TypeVar('T')
 # Function type to extract data from match objects
-# matchProcF[T] = Callable[[Match], T]
+matchProcF = Callable[[Match], T]
 # Function to parse file
-# Parser[T] = Callable[[Iterable[Text]], Union[T, List[T]]]
+Parser = Callable[[Iterable[str]], Union[T, Sequence[T]]]
 
 
 def parser_one_line(line_re, proc_fn, find_multiple=False):
     # type: (Pattern, matchProcF[T], bool) -> Parser[T]
-    """Generates a parser to look for isolated lines."""
+    """Generate a parser to look for isolated lines."""
 
     def parser(lines):
-        # type: (Iterable[Text]) -> Any
+        # type: (Iterable[str]) -> T
         lines = iter(lines)
         results = []
 
@@ -37,12 +41,24 @@ def parser_one_line(line_re, proc_fn, find_multiple=False):
     return parser
 
 
-def parser_with_header(header_re, line_re, line_proc, header_proc=None, find_multiple=False):
-    # type: (Pattern, Pattern, matchProcF[T], Optional[matchProcF[S]], bool) -> Parser[Union[List[T], Tuple[S, List[T]]]]
-    """Match a group of lines preceded by a header"""
+def parser_with_header(header_re: Pattern, line_re: Pattern,
+                       line_proc: matchProcF[T],
+                       header_proc: Optional[matchProcF[S]] = None,
+                       find_multiple: bool = False
+                       ) -> Parser[Union[Sequence[T], Tuple[S, Sequence[T]]]]:
+    """Generate a parser to match a group of lines preceded by a header.
 
+    :param header_re: Regex to match the header
+    :param line_re: Regex to match lines following the header
+    :param line_proc: Function to extract results for each matched line
+    :param header_proc: Function to extract results from the header
+    :param find_multiple: If true, searches for a new header after the end of
+        the first group is found.
+
+    :returns: Parser to call on lines of a file
+    """
     def parser(lines):
-        # type: (Iterable[Text]) -> Any
+        # type: (Iterable[str]) -> Union[Sequence[T], Tuple[S, Sequence[T]]]
         lines = iter(lines)
         capturing = False
         results = []
@@ -75,14 +91,14 @@ def parser_with_header(header_re, line_re, line_proc, header_proc=None, find_mul
 
 
 def parse_vector(s, *_, num_re=re.compile(r"[\d.-]+")):
-    # type: (Text) -> Tuple[float]
+    # type: (str) -> Tuple[float]
     """Convert a vector string into a tuple."""
     return tuple(map(float, num_re.findall(s)))
 
 
 def convert_coords(alat, basis, tau, in_type, out_type):
     # type: (float, np.ndarray, np.ndarray, str, str) -> np.ndarray
-    """Converts coordinate type.
+    """Convert coordinate type.
 
     :param alat: lattice parameter in bohr
     :param basis: basis in angstrom
@@ -104,6 +120,7 @@ def convert_coords(alat, basis, tau, in_type, out_type):
 
 def to_crystal(alat, basis, tau, in_type):
     # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
+    """Convert from arbitrary coords to crystal."""
     from scipy import constants
     bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
 
@@ -119,10 +136,11 @@ def to_crystal(alat, basis, tau, in_type):
 
 def from_crystal(alat, basis, tau, out_type):
     # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
+    """Convert from crystal coords to arbitrary coords."""
     # lattice vectors are rows of the basis
     if out_type == 'crystal':
         return tau
     elif out_type == 'angstrom':
         return tau @ basis
     else:
-        raise ValueError("Coord. type {}".format(in_type))
+        raise ValueError("Coord. type {}".format(out_type))
