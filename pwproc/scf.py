@@ -1,11 +1,9 @@
-"""
-`scf` subcommand parses single point energy calculations
-"""
+"""`scf` subcommand parses single point energy calculations."""
 
 
 def get_scf_energy(path):
     # type: (str) -> float
-    """Get the energy in Ry from pw.x output"""
+    """Get the energy in Ry from pw.x output."""
     import re
     from pwproc.util import parser_one_line
 
@@ -18,7 +16,7 @@ def get_scf_energy(path):
 
 def parse_scf(path, coord_type='crystal'):
     # type: (str, str) -> GeometryData
-    """Parse pw.x output file
+    """Parse pw.x output file.
 
     :param path: path to pw.x output
     :param coord_type: coordinate type of output
@@ -53,17 +51,17 @@ def parse_args(args):
     parser.add_argument('in_file', action='store', nargs='+',
                         help="List of pw.x output files")
     parser.add_argument('--xsf', action='store', metavar='FILE',
-                        help="Write xsf structures to file. The key `{PREFIX}` in FILE" \
-                        " is substituted for the calculation prefix")
-    parser.add_argument('--energy', nargs='?', type=FileType('w'), const=sys.stdout,
-                        metavar='FILE', help="Write energy to file (in Ry)")
+                        help="Write xsf structures to file. The key `{PREFIX}`"
+                        " in FILE is substituted for the calculation prefix")
+    parser.add_argument('--energy', nargs='?', type=FileType('w'),
+                        const=sys.stdout, metavar='FILE',
+                        help="Write energy to file (in Ry)")
 
     return parser.parse_args(args)
 
 
-
 def scf(args):
-    """Main program for `scf` subcommand"""
+    """Execute `scf` subcommand."""
     data = {}
     for p in args.in_file:
         geom = parse_scf(p, coord_type='angstrom')
@@ -73,7 +71,8 @@ def scf(args):
             data[geom.prefix] = geom
 
     if args.energy:
-        args.energy.writelines("{}: {}\n".format(p, d.energy) for p, d in data.items())
+        for p, d in data.items():
+            args.energy.write("{}: {}\n".format(p, d.energy))
         args.energy.close()
 
     if args.xsf:
@@ -86,4 +85,3 @@ if __name__ == '__main__':
 
     args = parse_args(sys.argv[1:])
     scf(args)
-

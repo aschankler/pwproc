@@ -1,6 +1,9 @@
-"""
-Defines the `fermi` subcommand for extracting the fermi energy.
-"""
+"""Defines the `fermi` subcommand for extracting the fermi energy."""
+
+from argparse import Namespace
+from io import TextIO
+from pathlib import Path
+from typing import Iterable, Sequence
 
 
 def find_fermi(path):
@@ -19,7 +22,7 @@ def find_fermi(path):
 
 
 def write_fermi(outfile, data, write_all=False):
-    # type: (TextIO, Iterable[str, Iterable[float]], bool) -> None
+    # type: (TextIO, Iterable[str, Sequence[float]], bool) -> None
     """Write fermi energy to data file."""
     for prefix, fe in data:
         if write_all:
@@ -33,6 +36,8 @@ def write_fermi(outfile, data, write_all=False):
 
 
 def parse_args(args):
+    # type: (Sequence[str]) -> Namespace
+    """Parse comandline arguments for fermi subcommand."""
     import sys
     from argparse import ArgumentParser, FileType
 
@@ -47,6 +52,7 @@ def parse_args(args):
 
 def fermi(args):
     # type: (Namespace) -> None
+    """Execute fermi command."""
     from pwproc.parsers import get_save_file
 
     names = [get_save_file(p) for p in args.in_file]
@@ -60,4 +66,3 @@ if __name__ == '__main__':
     import sys
     args = parse_args(sys.argv[1:])
     fermi(args)
-

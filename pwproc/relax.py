@@ -1,6 +1,4 @@
-"""
-Parser for pw.x relax output.
-"""
+"""Parser for pw.x relax output."""
 
 from pwproc.geometry import GeometryData, RelaxData
 
@@ -47,7 +45,7 @@ def parse_files(paths):
 
 
 def write_energy(e_file, data):
-    # type: (Text, Mapping[str, GeometryData]) -> None
+    # type: (str, Mapping[str, GeometryData]) -> None
     """Write energy data to file."""
     with open(e_file, 'w') as f:
         for prefix, dat in data.items():
@@ -60,9 +58,8 @@ def write_energy(e_file, data):
 
 
 def write_xsf(xsf, data):
-    # type: (Text, Mapping[str, GeometryData]) -> None
+    # type: (str, Mapping[str, GeometryData]) -> None
     """Write structure data to xsf files."""
-
     if '{PREFIX}' not in xsf:
         if len(data) != 1:
             raise ValueError('Saving multiple structures to same file')
@@ -84,18 +81,20 @@ def parse_args(args):
     parser = ArgumentParser(prog='pwproc relax',
                             description="Parser for relax and vc-relax output")
 
-    parser.add_argument('in_file', action='store', nargs='+', help="List of pw.x output files")
+    parser.add_argument('in_file', action='store', nargs='+',
+                        help="List of pw.x output files")
     parser.add_argument('--xsf', action='store', metavar='FILE',
-                        help="Write xsf structures to file. The key `{PREFIX}` in FILE" \
-                        " is replaced by the calculation prefix")
+                        help="Write xsf structures to file. The key `{PREFIX}`"
+                        " in FILE is replaced by the calculation prefix")
     parser.add_argument('--energy', action='store', metavar='FILE',
                         help="Write energy to file (in Ry)")
     endpt = parser.add_mutually_exclusive_group()
-    endpt.add_argument('--final', dest='endpoint', action='store_const', const='final',
-                       help="Save data only for the final structure. Warn if" \
-                       " relaxation did not finish")
-    endpt.add_argument('--initial', dest='endpoint', action='store_const', const='initial',
-                       help="Save data only for the initial structure")
+    endpt.add_argument('--final', dest='endpoint', action='store_const',
+                       const='final', help="Save data only for the final"
+                       " structure. Warn if relaxation did not finish")
+    endpt.add_argument('--initial', dest='endpoint', action='store_const',
+                       const='initial', help="Save data only for the initial"
+                       " structure")
 
     return parser.parse_args(args)
 
@@ -111,13 +110,13 @@ def relax(args):
         final, relax = data
         if args.endpoint == 'final':
             if final is None:
-                 print('Relaxation did not finish for {}'.format(prefix))
+                print('Relaxation did not finish for {}'.format(prefix))
             else:
                 out_data[prefix] = final
         elif args.endpoint == 'initial':
             out_data[prefix] = relax.get_init()
         else:
-            ou_data[prefix] = relax
+            out_data[prefix] = relax
 
     # Write XSF file
     if args.xsf:
@@ -132,4 +131,3 @@ if __name__ == '__main__':
     import sys
     args = parse_args(sys.argv[1:])
     relax(args)
-
