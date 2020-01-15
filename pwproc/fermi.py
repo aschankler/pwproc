@@ -24,7 +24,7 @@ def write_fermi(outfile, data, write_all=False):
     for prefix, fe in data:
         if write_all:
             # Write all FE for each file
-            outfile.write(prefix + '\n')
+            outfile.write("{} {}\n".format(prefix, len(fe)))
             for en in fe:
                 outfile.write('{}\n'.format(en))
         else:

@@ -52,7 +52,7 @@ def write_energy(e_file, data):
     with open(e_file, 'w') as f:
         for prefix, dat in data.items():
             if type(dat) is RelaxData:
-                f.write(prefix + '\n')
+                f.write("{} {}\n".format(prefix, len(dat.energy)))
                 for e in dat.energy:
                     f.write('{}\n'.format(e))
             else:
