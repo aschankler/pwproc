@@ -1,7 +1,7 @@
 """Defines the `fermi` subcommand for extracting the fermi energy."""
 
 from argparse import Namespace
-from io import TextIO
+from typing import TextIO
 from pathlib import Path
 from typing import Iterable, Sequence
 
