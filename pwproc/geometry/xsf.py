@@ -15,10 +15,15 @@ def _get_next_line(lines):
     """
     while True:
         l = next(lines).strip()
-        blank = l == ''
-        com = l[0] == '#'
-        if not (blank or com):
-            return l.strip()
+
+        # Blank line
+        if l == '':
+            continue
+        # Comment line
+        if l[0] == '#':
+            continue
+
+        return l.strip()
 
 
 def _match_primvec_header(line):
@@ -185,4 +190,3 @@ def gen_xsf_animate(basis, species, tau):
     yield from chain(*(gen_xsf(basis[i], species, tau[i],
                                write_header=False, step=(i+1))
                        for i in range(nsteps)))
-
