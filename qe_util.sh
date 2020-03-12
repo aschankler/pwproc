@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR=$(dirname "$(readlink -f "$0")")
-export PYTHONPATH="$DIR"
+export PYTHONPATH="$DIR:$PYTHONPATH"
 
 case "$1" in
 
