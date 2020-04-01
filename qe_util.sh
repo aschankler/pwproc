@@ -25,8 +25,13 @@ bands)
     shift
     python3 $DIR/pwproc/bands.py $@
     ;;
+berry)
+    shift
+    python3 $DIR/pwproc/berry.py $@
+    ;;
 *)
-    echo "Available modes are 'template,' 'scf', 'relax', 'fermi' and 'bands'"
+    echo "Available modes are 'template,' 'scf', 'relax', 'fermi', 'berry',"
+    echo "and 'bands'"
     exit 1
     ;;
 esac
