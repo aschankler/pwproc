@@ -9,10 +9,10 @@ import numpy as np
 # Basis = np.ndarray[3, 3]
 # Tau = np.ndarray[natoms, 3]
 
-def read_poscar(lines):
-    # type: (Iterable[Text]) -> Tuple[Text, Float, Basis, Species, Tau]
+def read_poscar(lines, out_type='angstrom'):
+    # type: (Iterable[Text], str) -> Tuple[Text, Float, Basis, Species, Tau]
     from itertools import chain, repeat
-    from pwproc.util import parse_vector
+    from pwproc.util import parse_vector, convert_coords
 
     # Read data from input
     lines = iter(lines)
@@ -23,7 +23,14 @@ def read_poscar(lines):
     s_num = next(lines)
 
     # Read atomic positions
-    assert(next(lines).strip() == "Cartesian")
+    coord_line = next(lines).strip()
+    if coord_line == 'Direct':
+        in_type = 'crystal'
+    elif coord_line == 'Cartesian':
+        in_type = 'angstrom'
+    else:
+        raise ValueError('Poscar error {}'.format(coord_line))
+
     pos = [l for l in lines]
 
     # parse the basis
@@ -35,6 +42,9 @@ def read_poscar(lines):
 
     # Parse positions
     pos = alat * np.array(tuple(map(parse_vector, pos)))
+
+    # Convert the input coordinates
+    pos = convert_coords(alat, basis, pos, in_type, out_type)
 
     return name, alat, basis, species, pos
 
