@@ -45,16 +45,15 @@ def parse_files(paths):
 
 
 def write_energy(e_file, data):
-    # type: (str, Mapping[str, GeometryData]) -> None
+    # type: (TextIO, Mapping[str, GeometryData]) -> None
     """Write energy data to file."""
-    with open(e_file, 'w') as f:
-        for prefix, dat in data.items():
-            if type(dat) is RelaxData:
-                f.write("{} {}\n".format(prefix, len(dat.energy)))
-                for e in dat.energy:
-                    f.write('{}\n'.format(e))
-            else:
-                f.write("{}: {}\n".format(prefix, dat.energy))
+    for prefix, dat in data.items():
+        if type(dat) is RelaxData:
+            e_file.write("{} {}\n".format(prefix, len(dat.energy)))
+            for e in dat.energy:
+                e_file.write('{}\n'.format(e))
+        else:
+            e_file.write("{}: {}\n".format(prefix, dat.energy))
 
 
 def write_xsf(xsf, data):
@@ -77,7 +76,8 @@ def write_xsf(xsf, data):
 
 def parse_args(args):
     """Argument parser for `relax` subcommand."""
-    from argparse import ArgumentParser
+    import sys
+    from argparse import ArgumentParser, FileType
     parser = ArgumentParser(prog='pwproc relax',
                             description="Parser for relax and vc-relax output")
 
@@ -86,7 +86,8 @@ def parse_args(args):
     parser.add_argument('--xsf', action='store', metavar='FILE',
                         help="Write xsf structures to file. The key `{PREFIX}`"
                         " in FILE is replaced by the calculation prefix")
-    parser.add_argument('--energy', action='store', metavar='FILE',
+    parser.add_argument('--energy', nargs='?', action='store', type=FileType('w'),
+                        const=sys.stdout, default=None, metavar='FILE',
                         help="Write energy to file (in Ry)")
     endpt = parser.add_mutually_exclusive_group()
     endpt.add_argument('--final', dest='endpoint', action='store_const',
@@ -125,6 +126,7 @@ def relax(args):
     # Write energy
     if args.energy:
         write_energy(args.energy, out_data)
+        args.energy.close()
 
 
 if __name__ == '__main__':
