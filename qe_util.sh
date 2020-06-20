@@ -29,9 +29,13 @@ berry)
     shift
     python3 $DIR/pwproc/berry.py $@
     ;;
+rattle)
+    shift
+    python3 $DIR/pwproc/rattle.py $@
+    ;;
 *)
     echo "Available modes are 'template,' 'scf', 'relax', 'fermi', 'berry',"
-    echo "and 'bands'"
+    echo "'rattle', and 'bands'"
     exit 1
     ;;
 esac
