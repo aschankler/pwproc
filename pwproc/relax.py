@@ -1,20 +1,11 @@
 """Parser for pw.x relax output."""
 
-from pwproc.geometry import GeometryData, RelaxData
-
 
 def parse_file(path):
-    from pwproc.parsers import parse_relax, get_save_file
+    from pwproc.parsers import parse_relax
 
-    final, relax = parse_relax(path, coord_type='angstrom')
-    prefix = get_save_file(path)
-
-    if final is None:
-        final_data = None
-    else:
-        final_data = GeometryData(prefix, final[1], final[2], final[3], energy=final[0])
-
-    relax_data = RelaxData(prefix, relax[1], relax[2], relax[3], energy=relax[0])
+    final_data, relax_data = parse_relax(path)
+    prefix = relax_data.prefix
 
     return (prefix, final_data, relax_data)
 

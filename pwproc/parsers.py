@@ -198,8 +198,10 @@ def parse_relax(path, coord_type='crystal'):
     """
     from itertools import starmap
     from pwproc.util import convert_coords
+    from pwproc.geometry import GeometryData, RelaxData
 
     # Run parsers on output
+    prefix = get_save_file(path)
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
     pos_type, energies, final_e, bases, species, pos = get_relax_data(path)
@@ -213,7 +215,11 @@ def parse_relax(path, coord_type='crystal'):
                         zip(basis_steps, pos)))
 
     # Decide if relaxation finished
-    final_data = (final_e, basis_steps[-1], species, pos[-1]) if final_e is not None else None
+    if final_e is not None:
+        final_data = GeometryData(prefix, basis_steps[-1], species, pos[-1],
+                                  energy=final_e, coord_type=coord_type)
+    else:
+        final_data = None
 
     # If relaxation finished, pos and bases contain duplicate final data
     if final_data is not None:
@@ -228,6 +234,7 @@ def parse_relax(path, coord_type='crystal'):
         else:
             assert(len(energies) == len(pos) + 1)
 
-    relax_data = (energies, (basis_i,) + basis_steps, species, (pos_i,) + pos)
+    relax_data = RelaxData(prefix, (basis_i,) + basis_steps, species,
+                           (pos_i,) + pos, energy=energies, coord_type=coord_type)
 
     return final_data, relax_data
