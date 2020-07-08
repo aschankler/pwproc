@@ -38,6 +38,7 @@ def parse_files(paths):
 def write_energy(e_file, data):
     # type: (TextIO, Mapping[str, GeometryData]) -> None
     """Write energy data to file."""
+    from pwproc.geometry import RelaxData
     for prefix, dat in data.items():
         if type(dat) is RelaxData:
             e_file.write("{} {}\n".format(prefix, len(dat.energy)))
