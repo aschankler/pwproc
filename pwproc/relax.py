@@ -10,7 +10,7 @@ def parse_file(path):
     return (prefix, final_data, relax_data)
 
 
-def parse_files(paths):
+def parse_files(paths, tags):
     data = {}
 
     for p in paths:
@@ -35,18 +35,40 @@ def parse_files(paths):
     return data
 
 
-def write_energy(e_file, data):
-    # type: (TextIO, Mapping[str, GeometryData]) -> None
-    """Write energy data to file."""
-    from pwproc.geometry import RelaxData
-    for prefix, dat in data.items():
-        if type(dat) is RelaxData:
-            e_file.write("{} {}\n".format(prefix, len(dat.energy)))
-            for e in dat.energy:
-                e_file.write('{}\n'.format(e))
+def _format_data_output(tag, fmt, data, data_len):
+    for prefix, record in data.items():
+        dat = record.data[tag]
+        if data_len == 'single':
+            yield "{}: {}".format(prefix, fmt(dat))
+            yield '\n'
+        elif data_len == 'full':
+            yield "{} {}\n".format(prefix, len(dat))
+            for el in dat:
+                yield fmt(el)
+                yield '\n'
+            yield '\n'
         else:
-            e_file.write("{}: {}\n".format(prefix, dat.energy))
+            raise ValueError
 
+
+def write_data(d_file, dtags, data, endpt):
+    # type: (TextIO, Iterable[str], Mapping[str, GeometryData], str) -> None
+    """Write additional data to file."""
+    formatters = {'energy': ("Energy (Ry)", lambda en: str(en)),
+                 # 'force': ('force', lambda _: raise NotImplementedError),
+                 # 'press': ('press', lambda _: raise NotImplementedError),
+                 # 'mag': ('mag', lambda _: raise NotImplementedError)}
+}
+
+    data_len = 'full' if endpt is None else 'single'
+
+    for tag in dtags:
+        # Look up formatter
+        header, fmt = formatters[tag]
+        # Write header
+        d_file.write(header + '\n')
+        # Dump for each file
+        d_file.writelines(_format_data_output(tag, fmt, data, data_len))
 
 def write_xsf(xsf, data):
     # type: (str, Mapping[str, GeometryData]) -> None
@@ -70,17 +92,29 @@ def parse_args(args):
     """Argument parser for `relax` subcommand."""
     import sys
     from argparse import ArgumentParser, FileType
+    from pathlib import Path
     parser = ArgumentParser(prog='pwproc relax',
-                            description="Parser for relax and vc-relax output")
+                            description="Parser for relax and vc-relax output.")
 
-    parser.add_argument('in_file', action='store', nargs='+',
-                        help="List of pw.x output files")
+    parser.add_argument('in_file', action='store', nargs='+', type=Path,
+                        metavar='FILE', help="List of pw.x output files")
     parser.add_argument('--xsf', action='store', metavar='FILE',
                         help="Write xsf structures to file. The key `{PREFIX}`"
                         " in FILE is replaced by the calculation prefix")
-    parser.add_argument('--energy', nargs='?', action='store', type=FileType('w'),
-                        const=sys.stdout, default=None, metavar='FILE',
-                        help="Write energy to file (in Ry)")
+    parser.add_argument('--data', action='store', type=FileType('w'),
+                        default=sys.stdout, metavar='FILE',
+                        help="Output file for structure data")
+    data_grp = parser.add_argument_group("Data fields", "Specify additional"
+                                         " data to gather from output files")
+    data_grp.add_argument('--energy', '-e', action='append_const', dest='dtags',
+                          const='energy', help="Write energy (in Ry)")
+    data_grp.add_argument('--force', '-f', action='append_const', dest='dtags',
+                          const='force', help="Output force data")
+    data_grp.add_argument('--press', '-p', action='append_const', dest='dtags',
+                          const='press', help="Output pressure data")
+    data_grp.add_argument('--mag', '-m', action='append_const', dest='dtags',
+                          const='mag', help="Output magnetization data")
+
     endpt = parser.add_mutually_exclusive_group()
     endpt.add_argument('--final', dest='endpoint', action='store_const',
                        const='final', help="Save data only for the final"
@@ -95,7 +129,7 @@ def parse_args(args):
 def relax(args):
     """Main function for `relax` subcommand."""
     # Parse the output files
-    relax_data = parse_files(args.in_file)
+    relax_data = parse_files(args.in_file, args.dtags)
 
     # Take the desired step
     out_data = {}
@@ -115,10 +149,10 @@ def relax(args):
     if args.xsf:
         write_xsf(args.xsf, out_data)
 
-    # Write energy
-    if args.energy:
-        write_energy(args.energy, out_data)
-        args.energy.close()
+    # Write additional data
+    if args.dtags:
+        write_data(args.data, args.dtags, out_data, args.endpoint)
+    args.data.close()
 
 
 if __name__ == '__main__':
