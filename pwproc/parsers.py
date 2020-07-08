@@ -85,116 +85,165 @@ def get_init_coord(path):
     return coord_type, spec, pos
 
 
-def get_relax_data(path):
-    # type: (path) -> Tuple[str, List[float,...], Union[float, None], List[np.ndarray], Species, Tuple[Tau,...]]
-    """Get geometry and energy data from relaxation.
+# ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
+# ParseData = Tuple[Pattern, ParseProcFn]
 
-    :param path: Path to pw.x output
+def _run_relax_parsers(path, parsers):
+    # type: (Path, Mapping[str, ParseData]) -> Mapping[str, List[Any]]
+    """Run arbitrary parsers on the pw.x output."""
+    # Set up buffers
+    buffers = {tag: [] for tag in parsers}
 
-    :returns:
-        pos_type: Describes the coordinate type of `positions`
-        energies: Vector of energies. Includes energy for initial state
-        final_energy: Energy of final structure. None if relaxation did not finsh
-        species: Vector of atom types
-        positions: Vector of atomic positions for each step. Does not include
-            initial position but includes final position if relaxation finished
-    """
-    basis_header_re = re.compile(r"CELL_PARAMETERS \((angstrom)\)")
-    geom_header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
-    energy_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
-    final_energy_re = re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry")
-    atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
-    basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
-
-    buffer_geom = False
-    buffer_basis = False
-    energies = []
-    final_energy = None
-    geoms = []
-    bases = []
-    geom_buf = []
-    basis_buf = []
-
-    # Parse the output file
+    # Iterate through file
     with open(path) as f:
-        for line in f:
-            if buffer_geom:
-                if atom_re.match(line):
-                    spec, pos = atom_re.match(line).groups()
-                    pos = parse_vector(pos)
-                    geom_buf.append((spec, pos))
-                else:
-                    buffer_geom = False
-                    geoms.append(geom_buf)
-                    geom_buf = []
-            elif buffer_basis:
-                if basis_row_re.match(line):
-                    basis_buf.append(parse_vector(line))
-                else:
-                    buffer_basis = False
-                    bases.append(np.array(basis_buf))
-                    basis_buf = []
-            else:
-                if energy_re.match(line):
-                    energies.append(float(energy_re.match(line).group(1)))
-                elif basis_header_re.match(line):
-                    buffer_basis = True
-                elif geom_header_re.match(line):
-                    buffer_geom = True
-                    # Capture the coordinate type
-                    geom_buf.append(geom_header_re.match(line).group(1))
-                elif final_energy_re.match(line):
-                    assert final_energy is None
-                    m = final_energy_re.match(line)
-                    final_type = m.group(1)
-                    final_energy = float(m.group(2))
-                else:
-                    pass
+        lines = iter(f)
+        line = next(lines)
+        while True:
+            for tag, parser in parsers.items():
+                header_re, proc_fn = parser
 
-    # If vc-relax, the true final energy is run in a new scf calculation
-    if final_energy is not None:
+                # Try matching headers
+                match = header_re.match(line)
+
+                # If header match, apply the corresponding parser
+                if match:
+                    proc_fn(match, lines, buffers[tag])
+                    break
+
+            try:
+                line = next(lines)
+            except StopIteration:
+                break
+
+    return buffers
+
+
+def _get_relax_parsers(tags):
+    # (Iterable[str]) -> Mapping[str, ParseData]
+    """Defines parsers for requested data types."""
+    def _proc_geometry(match, lines, buff):
+        atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
+        geom_tmp = []
+        pos_type = match.group(1)
+        l = next(lines)
+        m = atom_re.match(l)
+        while m:
+            s, pos = m.groups()
+            geom_tmp.append((s, parse_vector(pos)))
+            l = next(lines)
+            m = atom_re.match(l)
+        species, tau = zip(*geom_tmp)
+        buff.append((pos_type, species, np.array(tau)))
+
+    def _proc_basis(_, lines, buff):
+        basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
+        basis_tmp = []
+        l = next(lines)
+        while basis_row_re.match(l):
+            basis_tmp.append(parse_vector(l))
+            l = next(lines)
+        assert(len(basis_tmp) == 3)
+        buff.append(np.array(basis_tmp))
+
+    def _proc_press(match, lines, buff):
+        press_row_re = re.compile(r"^(?: +-?[.\d]+){6} *$")
+        press_tmp = []
+        l = next(lines)
+        while press_row_re.match(l):
+            press_tmp.append(parse_vector(l))
+            l = next(lines)
+        assert(len(press_tmp) == 3)
+        tot_p = float(match.group(1))
+        press_tmp = np.array(press_tmp)
+        press_au = press_tmp[:, :3]
+        press_bar = press_tmp[:, 3:]
+        buff.append((tot_p, press_au, press_bar))
+
+    parsers = {'energy': (re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry"),
+                          lambda m, _, b: b.append(float(m.group(1)))),
+               'fenergy': (re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry"),
+                           lambda m, _, b: b.append((m.group(1), float(m.group(2))))),
+               'basis': (re.compile(r"CELL_PARAMETERS \((angstrom)\)"), _proc_basis),
+               'geom': (re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)"),
+                        _proc_geometry),
+               'force': (re.compile(r"^ *Total force = +([.\d]+) +Total SCF correction = +([.\d]+) *$"),
+                         lambda m, _, b: b.append((float(m.group(1)), float(m.group(2))))),
+               'press': (re.compile(r"^ *total   stress .* \(kbar\) +P= +(-?[.\d]+) *$"),
+                         _proc_press),
+               'mag': (re.compile(r"^ *(total|absolute) magnetization += +(-?[.\d]+) +Bohr mag/cell *$"),
+                       lambda m, _, b: b.append((m.group(1), float(m.group(2)))))
+               }
+
+    return {tag: parsers[tag] for tag in tags}
+
+
+def _proc_relax_data(buffers):
+    # type: (Mapping[str, Sequence[Any]]) -> Any
+    tags = set(buffers)
+    assert(set(['energy', 'fenergy', 'geom', 'basis']) <= tags)
+    assert(tags <= set(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', 'mag']))
+
+    # Deal with energies first
+    energy = buffers['energy']
+
+    final_en = None
+    relax_kind = None
+    assert(len(buffers['fenergy']) < 2)
+    if len(buffers['fenergy']) == 1:
+        final_type, final_en = buffers['fenergy'][0]
+
+        # If vc-relax, the true final energy is run in a new scf calculation
+        # TODO: unclear if we should discard the energy or duplicate the geometry
         if final_type == 'enthalpy':
-            energies = energies[:-1]
+            relax_kind = 'vcrelax'
+            energy = energy[:-1]
         else:
-            assert final_type == 'energy'
+            assert(final_type == 'energy')
+            relax_kind = 'relax'
 
-    # Process geometry buffer to gather species and coordinate types
-    def parse_geom_buf(buf):
-        pos_type = buf[0]
-        spec, pos = zip(*buf[1:])
-        return pos_type, spec, np.array(pos)
-
-    pos_type, spec, pos = zip(*map(parse_geom_buf, geoms))
+    n_steps = len(energy)
 
     def all_equal(l):
         return l.count(l[0]) == len(l)
 
-    assert all_equal(pos_type) and all_equal(spec)
-    pos_type, spec = pos_type[0], spec[0]
-
-    # Process basis buffer
+    # Process geometry
+    pos_type, species, pos = zip(*buffers['geom'])
+    assert(all_equal(pos_type) and all_equal(species))
+    pos_type, species = pos_type[0], species[0]
+    bases = buffers['basis']
     if len(bases) > 0:
-        assert len(bases) == len(pos)
+        assert(len(bases) == len(pos))
+    geometry = (pos_type, bases, species, pos)
 
-    return pos_type, energies, final_energy, bases, spec, pos
+    # Verify other buffers
+    # TODO: change this to warn? may not be equal if calc was interrupted
+    data_buffers = {}
+    for t in tags - set(['energy', 'fenergy', 'geom', 'basis']):
+        assert(len(buffers[t]) == n_steps)
+        data_buffers[t] = buffers[t]
+
+    # TODO: process other buffers if present
+
+    return energy, final_en, relax_kind, geometry, data_buffers
+
+
+def _get_relax_data(path, tags):
+    # type: (Path, Iterable[str) -> Any
+    parsers = _get_relax_parsers(tags)
+    buffers = _run_relax_parsers(path, parsers)
+    return _proc_relax_data(buffers)
 
 
 def parse_relax(path, coord_type='crystal'):
-    # type: (path, str) -> Tuple[Union[None, Tuple[float, np.ndarray, Species, Tau]],
-    #                            Tuple[List[float], List[np.ndarray], Species, Tuple[Tau, ...]]]
+    # type: (Path, str) -> Tuple[Optional[GeometryData], RelaxData]
     """Gather data from pw.x relax run.
     
     :param path: path to pw.x output
     :param coord_type: coordinate type of output
 
     :returns:
-        final_data: None if relaxation did not finish, else Tuple[energy, species, positions]
-            energy: in Rydberg
-            basis: in Angstrom
-            species: vector of atomic species
-            posititons: shape (natoms, 3), same order as species
-        relax_data: Like final_data except energies, bases, and positions are a vector
-            with entries for each step
+        final_data: None if relaxation did not finish, else a data object
+        relax_data: Object with data from each step
     """
     from itertools import starmap
     from pwproc.util import convert_coords
@@ -204,7 +253,10 @@ def parse_relax(path, coord_type='crystal'):
     prefix = get_save_file(path)
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
-    pos_type, energies, final_e, bases, species, pos = get_relax_data(path)
+
+    tags = ('energy', 'fenergy', 'geom', 'basis')
+    energies, final_e, _relax_kind, geom, _data_buffers =  _get_relax_data(path, tags)
+    pos_type, bases, species, pos = geom
 
     assert species_i == species
 
