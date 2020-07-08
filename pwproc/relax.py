@@ -4,7 +4,7 @@
 def parse_file(path):
     from pwproc.parsers import parse_relax
 
-    final_data, relax_data = parse_relax(path)
+    final_data, relax_data = parse_relax(path, coord_type='angstrom')
     prefix = relax_data.prefix
 
     return (prefix, final_data, relax_data)
