@@ -88,7 +88,7 @@ def _read_primcoord(lines, step=None):
     nat = int(re.match(r"([\d]+)[ \t]+1", _get_next_line(lines)).group(1))
 
     # Read coodinate lines
-    coord_lines = [next(lines) for _ in range(nat)]
+    coord_lines = [_get_next_line(lines) for _ in range(nat)]
 
     # Parse coordinates and species
     species = []
