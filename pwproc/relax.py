@@ -1,10 +1,10 @@
 """Parser for pw.x relax output."""
 
 
-def parse_file(path):
+def parse_file(path, tags):
     from pwproc.parsers import parse_relax
 
-    final_data, relax_data = parse_relax(path, coord_type='angstrom')
+    final_data, relax_data = parse_relax(path, tags=tags, coord_type='angstrom')
     prefix = relax_data.prefix
 
     return (prefix, final_data, relax_data)
@@ -14,7 +14,7 @@ def parse_files(paths, tags):
     data = {}
 
     for p in paths:
-        prefix, final, relax = parse_file(p)
+        prefix, final, relax = parse_file(p, tags)
 
         if prefix not in data:
             data[prefix] = (final, relax)
@@ -55,10 +55,11 @@ def write_data(d_file, dtags, data, endpt):
     # type: (TextIO, Iterable[str], Mapping[str, GeometryData], str) -> None
     """Write additional data to file."""
     formatters = {'energy': ("Energy (Ry)", lambda en: str(en)),
-                 # 'force': ('force', lambda _: raise NotImplementedError),
+                  'force': ('Total force   SCF correction  (Ry/au)',
+                            lambda f: '{}  {}'.format(*f)),
                  # 'press': ('press', lambda _: raise NotImplementedError),
-                 # 'mag': ('mag', lambda _: raise NotImplementedError)}
-}
+                  'mag': ('Total mag.  Abs. mag.  (Bohr mag/cell)',
+                           lambda m: '{}  {}'.format(*m))}
 
     data_len = 'full' if endpt is None else 'single'
 

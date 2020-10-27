@@ -180,7 +180,7 @@ class RelaxData(GeometryData):
         assert(self.coord_type == other.coord_type)
         new_basis = self.basis + other.basis
         new_tau = self.tau + other.tau
-        new_data = {getattr(self, k) + getattr(other, k) for k in self.data}
+        new_data = {k: getattr(self, k) + getattr(other, k) for k in self.data}
 
         return self.__class__(self.prefix, new_basis, self.species, new_tau,
                               coord_type=self.coord_type, **new_data)

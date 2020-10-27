@@ -118,6 +118,10 @@ def _run_relax_parsers(path, parsers):
     return buffers
 
 
+_base_tags = frozenset(('energy', 'fenergy', 'geom', 'basis'))
+_all_tags = frozenset(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', 'mag'])
+
+
 def _get_relax_parsers(tags):
     # (Iterable[str]) -> Mapping[str, ParseData]
     """Defines parsers for requested data types."""
@@ -159,6 +163,18 @@ def _get_relax_parsers(tags):
         press_bar = press_tmp[:, 3:]
         buff.append((tot_p, press_au, press_bar))
 
+    def _proc_mag(match, lines, buff):
+        m_tot = float(match.group(1))
+        l = next(lines)
+        m = re.match(r"^ * absolute magnetization += +(-?[.\d]+) +Bohr mag/cell *$", l)
+        assert(m is not None)
+        m_abs = float(m.group(1))
+        assert(next(lines).strip() == '')
+        l = next(lines)
+        m_conv = re.match(r"^ +convergence has been achieved in +[\d]+ iterations *$", l)
+        if m_conv:
+            buff.append((m_tot, m_abs))
+
     parsers = {'energy': (re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry"),
                           lambda m, _, b: b.append(float(m.group(1)))),
                'fenergy': (re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry"),
@@ -170,8 +186,8 @@ def _get_relax_parsers(tags):
                          lambda m, _, b: b.append((float(m.group(1)), float(m.group(2))))),
                'press': (re.compile(r"^ *total   stress .* \(kbar\) +P= +(-?[.\d]+) *$"),
                          _proc_press),
-               'mag': (re.compile(r"^ *(total|absolute) magnetization += +(-?[.\d]+) +Bohr mag/cell *$"),
-                       lambda m, _, b: b.append((m.group(1), float(m.group(2)))))
+               'mag': (re.compile(r"^ *total magnetization += +(-?[.\d]+) +Bohr mag/cell *$"),
+                       _proc_mag)
                }
 
     return {tag: parsers[tag] for tag in tags}
@@ -180,8 +196,8 @@ def _get_relax_parsers(tags):
 def _proc_relax_data(buffers):
     # type: (Mapping[str, Sequence[Any]]) -> Any
     tags = set(buffers)
-    assert(set(['energy', 'fenergy', 'geom', 'basis']) <= tags)
-    assert(tags <= set(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', 'mag']))
+    assert(_base_tags <= tags)
+    assert(tags <= _all_tags)
 
     # Deal with energies first
     energy = buffers['energy']
@@ -215,12 +231,16 @@ def _proc_relax_data(buffers):
         assert(len(bases) == len(pos))
     geometry = (pos_type, bases, species, pos)
 
-    # Verify other buffers
-    # TODO: change this to warn? may not be equal if calc was interrupted
+    # Verify size of other buffers
     data_buffers = {}
-    for t in tags - set(['energy', 'fenergy', 'geom', 'basis']):
-        assert(len(buffers[t]) == n_steps)
+    for t in tags - _base_tags:
         data_buffers[t] = buffers[t]
+        if relax_kind == 'vcrelax' and final_en is not None:
+            # TODO: Again a semi-duplicate entry from the final SCF calculation
+            assert(len(data_buffers[t]) == n_steps + 1)
+            data_buffers[t] = data_buffers[t][:-1]
+        else:
+            assert(len(data_buffers[t]) == n_steps)
 
     # TODO: process other buffers if present
 
@@ -228,14 +248,19 @@ def _proc_relax_data(buffers):
 
 
 def _get_relax_data(path, tags):
-    # type: (Path, Iterable[str) -> Any
+    # type: (Path, Optional[Iterable[str]]) -> Any
+    if tags is None:
+        tags = set()
+    else:
+        tags = set(tags)
+    tags = tags | _base_tags
     parsers = _get_relax_parsers(tags)
     buffers = _run_relax_parsers(path, parsers)
     return _proc_relax_data(buffers)
 
 
-def parse_relax(path, coord_type='crystal'):
-    # type: (Path, str) -> Tuple[Optional[GeometryData], RelaxData]
+def parse_relax(path, tags=None, coord_type='crystal'):
+    # type: (Path, Optional[Iterable[str]], str) -> Tuple[Optional[GeometryData], RelaxData]
     """Gather data from pw.x relax run.
     
     :param path: path to pw.x output
@@ -254,8 +279,7 @@ def parse_relax(path, coord_type='crystal'):
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
 
-    tags = ('energy', 'fenergy', 'geom', 'basis')
-    energies, final_e, _relax_kind, geom, _data_buffers =  _get_relax_data(path, tags)
+    energies, final_e, _relax_kind, geom, data_bufs =  _get_relax_data(path, tags)
     pos_type, bases, species, pos = geom
 
     assert species_i == species
@@ -268,8 +292,10 @@ def parse_relax(path, coord_type='crystal'):
 
     # Decide if relaxation finished
     if final_e is not None:
+        final_dat = {k: v[-1] for k, v in data_bufs.items()}
         final_data = GeometryData(prefix, basis_steps[-1], species, pos[-1],
-                                  energy=final_e, coord_type=coord_type)
+                                  energy=final_e, **final_dat,
+                                  coord_type=coord_type)
     else:
         final_data = None
 
@@ -287,6 +313,7 @@ def parse_relax(path, coord_type='crystal'):
             assert(len(energies) == len(pos) + 1)
 
     relax_data = RelaxData(prefix, (basis_i,) + basis_steps, species,
-                           (pos_i,) + pos, energy=energies, coord_type=coord_type)
+                           (pos_i,) + pos, energy=energies, **data_bufs,
+                           coord_type=coord_type)
 
     return final_data, relax_data
