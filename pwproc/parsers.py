@@ -3,14 +3,19 @@ Parsers for pw.x output.
 """
 
 import re
+from typing import Iterable, Tuple
 import numpy as np
 
 from pwproc.util import parse_vector
 
 # Vector of atomic species
-# Species = Tuple[str, ...]
+Species = Tuple[str, ...]
+# Crystal basis
+# Basis = np.ndarray[3, 3]
+Basis = np.ndarray
 # Position matrix
 # Tau = np.ndarray[natoms, 3]
+Tau = np.ndarray
 
 
 def get_save_file(path):
@@ -86,6 +91,30 @@ def get_init_coord(path):
     pos = np.array(tuple(map(parse_vector, pos)))
 
     return coord_type, spec, pos
+
+
+def _count_relax_steps(path):
+    # type: (Path) -> Tuple[int, int, int]
+    """Count the number of completed steps."""
+    scf_re = re.compile(r"^ +number of scf cycles += +(?P<scf>[\d]+)$")
+    bfgs_re = re.compile(r"^ +number of bfgs steps += +(?P<bfgs>[\d]+)$")
+
+    steps = []
+
+    with open(path) as f:
+        lines = iter(f)
+        for l in lines:
+            m1 = scf_re.match(l)
+            if m1 is not None:
+                nscf = int(m1.group('scf'))
+                m2 = bfgs_re.match(next(lines))
+                if m2 is None:
+                    raise ValueError("Malformed step count")
+                nbfgs = int(m2.group('bfgs'))
+                steps.append((nscf, nbfgs))
+
+    return len(steps), steps[0][0], steps[-1][0]
+
 
 
 # ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
@@ -212,15 +241,13 @@ def _proc_relax_data(buffers):
         final_type, final_en = buffers['fenergy'][0]
 
         # If vc-relax, the true final energy is run in a new scf calculation
-        # TODO: unclear if we should discard the energy or duplicate the geometry
+        # Here we discard it
         if final_type == 'enthalpy':
             relax_kind = 'vcrelax'
             energy = energy[:-1]
         else:
             assert(final_type == 'energy')
             relax_kind = 'relax'
-
-    n_steps = len(energy)
 
     def all_equal(l):
         return l.count(l[0]) == len(l)
@@ -234,24 +261,16 @@ def _proc_relax_data(buffers):
         assert(len(bases) == len(pos))
     geometry = (pos_type, bases, species, pos)
 
-    # Verify size of other buffers
+    # Save the other buffers
     data_buffers = {}
     for t in tags - _base_tags:
         data_buffers[t] = buffers[t]
-        if relax_kind == 'vcrelax' and final_en is not None:
-            # TODO: Again a semi-duplicate entry from the final SCF calculation
-            assert(len(data_buffers[t]) == n_steps + 1)
-            data_buffers[t] = data_buffers[t][:-1]
-        else:
-            assert(len(data_buffers[t]) == n_steps)
-
-    # TODO: process other buffers if present
 
     return energy, final_en, relax_kind, geometry, data_buffers
 
 
 def _get_relax_data(path, tags):
-    # type: (Path, Optional[Iterable[str]]) -> Any
+    # type: (Path, Union[Iterable[str], None]) -> Any
     if tags is None:
         tags = set()
     else:
@@ -262,61 +281,118 @@ def _get_relax_data(path, tags):
     return _proc_relax_data(buffers)
 
 
+def _proc_geom_buffs(geom_buff: Tuple[str, Iterable[Basis], Species, Iterable[Tau]],
+                     geom_init: Tuple[str, float, Basis, Species, Tau],
+                     target_coord: str,
+                     n_steps: int,
+                     relax_kind: str,
+                     relax_done: bool
+                    ) -> Tuple[Iterable[Basis], Species, Iterable[Tau]]:
+    from itertools import starmap
+    from pwproc.util import convert_coords
+
+    # Unpack geometry
+    ctype_i, alat, basis_i, species_i, pos_i = geom_init
+    ctype, basis_steps, species, pos = geom_buff
+
+    assert(species_i == species)
+
+    # Convert coordinates if needed
+    pos_i = convert_coords(alat, basis_i, pos_i, ctype_i, target_coord)
+    basis_steps = (basis_i,) * len(pos) if len(basis_steps) == 0 else tuple(basis_steps)
+    pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, ctype, target_coord),
+                        zip(basis_steps, pos)))
+
+    # Check length of buffer
+    if relax_done:
+        # The final SCF step during relax does not register with the step counter
+        # The final duplicate SCF in vc-relax also does not register
+        # However the first geometry is captured in the init_geom buffer
+        expected_len = n_steps if relax_kind == 'relax' else n_steps + 1
+        if len(pos) != expected_len:
+            raise ValueError("Unexpected length for geometry")
+    else:
+        # First geometry is not counted here
+        if len(pos) == n_steps - 1:
+            pass
+        elif len(pos) == n_steps:
+            # Geometry written for a step that did ont finish
+            pos = pos[:-1]
+            basis_steps = basis_steps[:-1]
+        else:
+            raise ValueError("Unexpected length for geometry")
+
+    return (basis_i,) + basis_steps, species, (pos_i,) + pos
+
+
+def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
+    # type: (Mapping[str, Sequence[Any]], int, str, bool) -> Mapping[str, Sequence[Any]]
+
+    if relax_done:
+        # The final SCF step during relax does not register with the step counter
+        # The final duplicate SCF in vc-relax also does not register
+        expected_len = n_steps + 1 if relax_kind == 'relax' else n_steps + 2
+    else:
+        expected_len = n_steps
+
+    for tag in buffers:
+        if len(buffers[tag]) != expected_len:
+            if not relax_done and len(buffers[tag]) == expected_len + 1:
+                # This qty was written for a step that did not finish
+                buffers[tag] = buffers[tag][:-1]
+            else:
+                raise ValueError("Unexpected length for {!r} buffer".format(tag))
+
+    return buffers
+
+
 def parse_relax(path, tags=None, coord_type='crystal'):
     # type: (Path, Optional[Iterable[str]], str) -> Tuple[Optional[GeometryData], RelaxData]
     """Gather data from pw.x relax run.
     
     :param path: path to pw.x output
+    :param tags: Tags to specify which parsers to run on output
     :param coord_type: coordinate type of output
 
     :returns:
         final_data: None if relaxation did not finish, else a data object
         relax_data: Object with data from each step
     """
-    from itertools import starmap
-    from pwproc.util import convert_coords
     from pwproc.geometry import GeometryData, RelaxData
 
     # Run parsers on output
     prefix = get_save_file(path)
+    n_steps, istart, iend = _count_relax_steps(path)
+
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
+    geom_init = (ctype_i, alat, basis_i, species_i, pos_i)
 
-    energies, final_e, _relax_kind, geom, data_bufs =  _get_relax_data(path, tags)
-    pos_type, bases, species, pos = geom
+    energies, final_e, _relax_kind, geom, data_buffs =  _get_relax_data(path, tags)
+    _relax_done = final_e is not None
 
-    assert species_i == species
-
-    # Convert coordinates if needed
-    pos_i = convert_coords(alat, basis_i, pos_i, ctype_i, coord_type)
-    basis_steps = (basis_i,) * len(pos) if len(bases) == 0 else tuple(bases)
-    pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, pos_type, coord_type),
-                        zip(basis_steps, pos)))
+    # Trim data buffers
+    geom_buffs = _proc_geom_buffs(geom, geom_init, coord_type, n_steps, _relax_kind, _relax_done)
+    basis, species, tau = geom_buffs
+    data_buffs = _trim_data_buffs(data_buffs, n_steps, _relax_kind, _relax_done)
 
     # Decide if relaxation finished
-    if final_e is not None:
-        final_dat = {k: v[-1] for k, v in data_bufs.items()}
-        final_data = GeometryData(prefix, basis_steps[-1], species, pos[-1],
+    if _relax_done:
+        # Gather final data
+        final_dat = {k: v[-1] for k, v in data_buffs.items()}
+        final_data = GeometryData(prefix, basis[-1], species, tau[-1],
                                   energy=final_e, **final_dat,
                                   coord_type=coord_type)
+
+        # Trim final data (only for vc-relax)
+        if _relax_kind == 'vcrelax':
+            basis = basis[:-1]
+            tau = tau[:-1]
+            data_buffs = {k: v[:-1] for k, v in data_buffs.items()}
     else:
         final_data = None
 
-    # If relaxation finished, pos and bases contain duplicate final data
-    if final_data is not None:
-        pos = pos[:-1]
-        basis_steps = basis_steps[:-1]
-    else:
-        # If the relaxation was interupted, there may be an extra position entry
-        if len(energies) == len(pos):
-            # Extra entry after adding the initial coords
-            pos = pos[:-1]
-            basis_steps = basis_steps[:-1]
-        else:
-            assert(len(energies) == len(pos) + 1)
-
-    relax_data = RelaxData(prefix, (basis_i,) + basis_steps, species,
-                           (pos_i,) + pos, energy=energies, **data_bufs,
-                           coord_type=coord_type)
+    relax_data = RelaxData(prefix, basis, species, tau, energy=energies,
+                           coord_type=coord_type, **data_buffs)
 
     return final_data, relax_data
