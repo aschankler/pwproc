@@ -36,7 +36,7 @@ def parser_one_line(line_re, proc_fn, find_multiple=False):
                     results.append(processed)
             else:
                 pass
-        return results
+        return results if find_multiple else None
 
     return parser
 

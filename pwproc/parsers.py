@@ -18,11 +18,14 @@ def get_save_file(path):
     """Extract the prefix from pw.x output."""
     from pwproc.util import parser_one_line
 
-    save_re = re.compile(r"[ \t]+Writing output data file ([-.\w]+).save")
+    save_re = re.compile(r"^[ \t]+Writing output data file (?:\./)?([-.\w]+).save/?$")
     save_parser = parser_one_line(save_re, lambda m: m.group(1))
 
     with open(path) as f:
-        return save_parser(f)
+        prefix = save_parser(f)
+
+    assert(prefix is not None)
+    return prefix
 
 
 def get_init_basis(path):
