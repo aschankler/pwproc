@@ -235,8 +235,8 @@ def _get_relax_parsers(tags):
     return {tag: parsers[tag] for tag in tags}
 
 
-def _proc_relax_data(buffers):
-    # type: (Mapping[str, Sequence[Any]]) -> Any
+def _proc_relax_data(buffers, n_steps):
+    # type: (Mapping[str, Sequence[Any]], int) -> Any
     tags = set(buffers)
     assert(_base_tags <= tags)
     assert(tags <= _all_tags)
@@ -250,19 +250,29 @@ def _proc_relax_data(buffers):
     if len(buffers['fenergy']) == 1:
         final_type, final_en = buffers['fenergy'][0]
 
-        # If vc-relax, the true final energy is run in a new scf calculation
-        # Here we discard it
+        # If vc-relax, the true final energy is run in a new scf calculation,
+        # which is captured in the `energy` buffer. The `fenergy` buffer has
+        # a duplicate of last relaxation SCF step, which is discarded.
         if final_type == 'enthalpy':
             relax_kind = 'vcrelax'
-            energy = energy[:-1]
+            if len(energy) == n_steps + 1:
+                final_en = energy[-1]
+                energy = energy[:-1]
+            elif len(energy) == n_steps:
+                # In this case, the final SCF step was interrupted
+                final_en = None
+            else:
+                raise ValueError("Unexpected length in energy buffer")
+
         else:
             assert(final_type == 'energy')
+            assert(len(energy) == n_step)
             relax_kind = 'relax'
 
     def all_equal(l):
         return l.count(l[0]) == len(l)
 
-    # Process geometry
+    # Re-package geometry
     pos_type, species, pos = zip(*buffers['geom'])
     assert(all_equal(pos_type) and all_equal(species))
     pos_type, species = pos_type[0], species[0]
@@ -279,8 +289,8 @@ def _proc_relax_data(buffers):
     return energy, final_en, relax_kind, geometry, data_buffers
 
 
-def _get_relax_data(path, tags):
-    # type: (Path, Union[Iterable[str], None]) -> Any
+def _get_relax_data(path, tags, n_steps):
+    # type: (Path, Union[Iterable[str], None], int) -> Any
     if tags is None:
         tags = set()
     else:
@@ -288,7 +298,7 @@ def _get_relax_data(path, tags):
     tags = tags | _base_tags
     parsers = _get_relax_parsers(tags)
     buffers = _run_relax_parsers(path, parsers)
-    return _proc_relax_data(buffers)
+    return _proc_relax_data(buffers, n_steps)
 
 
 def _proc_geom_buffs(geom_buff: Tuple[str, Iterable[Basis], Species, Iterable[Tau]],
@@ -376,7 +386,7 @@ def parse_relax(path, tags=None, coord_type='crystal'):
     ctype_i, species_i, pos_i = get_init_coord(path)
     geom_init = (ctype_i, alat, basis_i, species_i, pos_i)
 
-    energies, final_e, _relax_kind, geom, data_buffs =  _get_relax_data(path, tags)
+    energies, final_e, _relax_kind, geom, data_buffs =  _get_relax_data(path, tags, n_steps)
     _relax_done = final_e is not None
 
     # Trim data buffers

@@ -167,7 +167,8 @@ class RelaxData(GeometryData):
 
     def __setattr__(self, name, value):
         if name in self._allowed_data_types:
-            if self.nsteps: assert(len(value) == self.nsteps)
+            if self.nsteps and len(value) != self.nsteps:
+                raise ValueError("Incorrect length for {!r}".format(name))
             self.data[name] = value
         else:
             object.__setattr__(self, name, value)
