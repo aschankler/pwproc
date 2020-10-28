@@ -98,8 +98,11 @@ def _count_relax_steps(path):
     """Count the number of completed steps."""
     scf_re = re.compile(r"^ +number of scf cycles += +(?P<scf>[\d]+)$")
     bfgs_re = re.compile(r"^ +number of bfgs steps += +(?P<bfgs>[\d]+)$")
+    last_step_re = re.compile(r"^ +bfgs converged in +(?P<scf>[\d]+) scf"
+                               " cycles and +(?P<bfgs>[\d]+) bfgs steps$")
 
     steps = []
+    last_step = None
 
     with open(path) as f:
         lines = iter(f)
@@ -113,8 +116,15 @@ def _count_relax_steps(path):
                 nbfgs = int(m2.group('bfgs'))
                 steps.append((nscf, nbfgs))
 
-    return len(steps), steps[0][0], steps[-1][0]
+            m3 = last_step_re.match(l)
+            if m3 is not None:
+                last_step = (int(m3.group('scf')), int(m3.group('bfgs')))
+                break
 
+    if last_step is not None:
+        steps.append(last_step)
+
+    return len(steps), steps[0][0], steps[-1][0]
 
 
 # ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
@@ -305,10 +315,9 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Iterable[Basis], Species, Iterable[Ta
 
     # Check length of buffer
     if relax_done:
-        # The final SCF step during relax does not register with the step counter
-        # The final duplicate SCF in vc-relax also does not register
+        # The final duplicate SCF in vc-relax does not register on the step count
         # However the first geometry is captured in the init_geom buffer
-        expected_len = n_steps if relax_kind == 'relax' else n_steps + 1
+        expected_len = n_steps - 1 if relax_kind == 'relax' else n_steps
         if len(pos) != expected_len:
             raise ValueError("Unexpected length for geometry")
     else:
@@ -329,9 +338,8 @@ def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
     # type: (Mapping[str, Sequence[Any]], int, str, bool) -> Mapping[str, Sequence[Any]]
 
     if relax_done:
-        # The final SCF step during relax does not register with the step counter
-        # The final duplicate SCF in vc-relax also does not register
-        expected_len = n_steps + 1 if relax_kind == 'relax' else n_steps + 2
+        # The final duplicate SCF in vc-relax does not register in step count
+        expected_len = n_steps if relax_kind == 'relax' else n_steps + 1
     else:
         expected_len = n_steps
 
