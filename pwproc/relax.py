@@ -1,5 +1,7 @@
 """Parser for pw.x relax output."""
 
+import numpy as np
+
 
 def parse_file(path, tags):
     from pwproc.parsers import parse_relax
@@ -56,8 +58,9 @@ def write_data(d_file, dtags, data, endpt):
     """Write additional data to file."""
     formatters = {'energy': ("Energy (Ry)", lambda en: str(en)),
                   'force': ('Total force   SCF correction  (Ry/au)',
-                            lambda f: '{}  {}'.format(*f)),
-                 # 'press': ('press', lambda _: raise NotImplementedError),
+                            lambda f: '{:05.3f}  {:05.3f}'.format(*f)),
+                  'press': ('Total Press.  Max Press.  (kbar)',
+                            lambda p: "{: .2f}  {: .2f}".format(p[0], np.abs(p[2]).max())),
                   'mag': ('Total mag.  Abs. mag.  (Bohr mag/cell)',
                            lambda m: '{}  {}'.format(*m))}
 
