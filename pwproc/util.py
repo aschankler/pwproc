@@ -1,10 +1,9 @@
-"""Utilities for use througout the program.
+"""Utilities for use throughout the program.
 
 Defines parser generators and coordinate transformations.
 """
 
 import re
-import numpy as np
 
 from typing import Callable, Iterable, Match, Optional, Pattern, Sequence, \
                    Tuple, TypeVar, Union
@@ -90,57 +89,7 @@ def parser_with_header(header_re: Pattern, line_re: Pattern,
     return parser
 
 
-def parse_vector(s, *_, num_re=re.compile(r"[\d.-]+")):
+def parse_vector(s, *, num_re=re.compile(r"[\d.-]+")):
     # type: (str) -> Tuple[float]
     """Convert a vector string into a tuple."""
     return tuple(map(float, num_re.findall(s)))
-
-
-def convert_coords(alat, basis, tau, in_type, out_type):
-    # type: (float, np.ndarray, np.ndarray, str, str) -> np.ndarray
-    """Convert coordinate type.
-
-    :param alat: lattice parameter in bohr
-    :param basis: basis in angstrom
-    :param tau: vector of posititons shape (natoms, 3)
-    :param in_type: coordinate type of `tau`
-    :param out_type: coordinate type to return
-    """
-    if in_type == out_type:
-        return tau
-
-    # Otherwise convert first to crystal
-    tau = to_crystal(alat, basis, tau, in_type)
-
-    # Then to desired type
-    tau = from_crystal(alat, basis, tau, out_type)
-
-    return tau
-
-
-def to_crystal(alat, basis, tau, in_type):
-    # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
-    """Convert from arbitrary coords to crystal."""
-    from scipy import constants
-    bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
-
-    if in_type == 'crystal':
-        return tau
-    elif in_type == 'alat':
-        return alat * bohr_to_ang * tau @ np.linalg.inv(basis)
-    elif in_type == 'angstrom':
-        return tau @ np.linalg.inv(basis)
-    else:
-        raise ValueError("Coord. type {}".format(in_type))
-
-
-def from_crystal(alat, basis, tau, out_type):
-    # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
-    """Convert from crystal coords to arbitrary coords."""
-    # lattice vectors are rows of the basis
-    if out_type == 'crystal':
-        return tau
-    elif out_type == 'angstrom':
-        return tau @ basis
-    else:
-        raise ValueError("Coord. type {}".format(out_type))

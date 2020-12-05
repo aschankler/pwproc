@@ -44,7 +44,7 @@ class GeometryData:
         return self._coord_type
 
     def convert_coords(self, new_coord):
-        from pwproc.util import convert_coords
+        from pwproc.geometry import convert_coords
         self.tau = convert_coords(1.0, self.basis, self.tau, self.coord_type, new_coord)
         self._coord_type = new_coord
 
@@ -137,7 +137,7 @@ class RelaxData(GeometryData):
             return None
 
     def convert_coords(self, new_coords):
-        from pwproc.util import convert_coords
+        from pwproc.geometry import convert_coords
 
         self.tau = tuple(convert_coords(1.0, b, t, self.coord_type, new_coords)
                          for b, t in zip(self.basis, self.tau))

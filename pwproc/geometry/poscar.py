@@ -1,6 +1,4 @@
-"""
-Read/write for POSCAR files.
-"""
+"""Read/write for POSCAR files."""
 
 import numpy as np
 
@@ -12,7 +10,8 @@ import numpy as np
 def read_poscar(lines, out_type='angstrom'):
     # type: (Iterable[Text], str) -> Tuple[Text, Float, Basis, Species, Tau]
     from itertools import chain, repeat
-    from pwproc.util import parse_vector, convert_coords
+    from pwproc.util import parse_vector
+    from pwproc.geometry import convert_coords
 
     # Read data from input
     lines = iter(lines)

@@ -23,9 +23,8 @@ def parse_scf(path, coord_type='crystal'):
 
     :returns: GeometryData
     """
-    from pwproc.geometry import GeometryData
+    from pwproc.geometry import convert_coords, GeometryData
     from pwproc.parsers import get_save_file, get_init_basis, get_init_coord
-    from pwproc.util import convert_coords
 
     # Run parsers on output to get geometry
     prefix = get_save_file(path)

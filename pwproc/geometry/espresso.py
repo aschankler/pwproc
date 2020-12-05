@@ -187,7 +187,6 @@ def parse_pwi_cell(cell_card):
 
 def parse_pwi_atoms(atom_card):
     """Parse atomic positions."""
-    from pwproc.util import convert_coords
     assert(atom_card.kind == 'ATOMIC_POSITIONS')
     species = []
     tau = []
@@ -207,6 +206,7 @@ def parse_pwi_atoms(atom_card):
         if_pos = None
 
     return species, np.array(tau), if_pos
+
 
 def gen_pwi_cell(basis):
     # type: (Basis) -> Iterator[str]
@@ -253,4 +253,3 @@ def gen_pwi(basis: Basis, species: Species, pos: Tau, coord_type: str,
     # Yield atomic positions
     if write_pos:
         yield from gen_pwi_atoms(species, pos, coord_type, if_pos)
-

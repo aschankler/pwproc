@@ -1,5 +1,7 @@
 """Read/write functions for geometry files."""
 
+from pwproc.geometry.util import convert_coords
+
 # Put datastructures on the namespace
 from pwproc.geometry.data import GeometryData, RelaxData
 

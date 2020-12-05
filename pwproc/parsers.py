@@ -315,7 +315,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
                      relax_done: bool
                      ) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]:
     from itertools import starmap
-    from pwproc.util import convert_coords
+    from pwproc.geometry import convert_coords
 
     # Unpack geometry
     ctype_i, alat, basis_i, species_i, pos_i = geom_init
