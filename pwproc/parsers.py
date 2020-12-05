@@ -1,25 +1,23 @@
-"""
-Parsers for pw.x output.
-"""
+"""Parsers for pw.x output."""
 
 import re
-from typing import Iterable, Tuple
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Sequence, Text, Tuple, List
+from typing import Callable, Iterator, Optional, Pattern, Match, Union
 import numpy as np
 
 from pwproc.util import parse_vector
 
 # Vector of atomic species
 Species = Tuple[str, ...]
-# Crystal basis
-# Basis = np.ndarray[3, 3]
+# Crystal basis [3x3]
 Basis = np.ndarray
-# Position matrix
-# Tau = np.ndarray[natoms, 3]
+# Position matrix [n_atoms x 3]
 Tau = np.ndarray
 
 
 def get_save_file(path):
-    # (path) -> str
+    # type: (Path) -> str
     """Extract the prefix from pw.x output."""
     from pwproc.util import parser_one_line
 
@@ -34,11 +32,12 @@ def get_save_file(path):
 
 
 def get_init_basis(path):
-    # type: (path) -> Tuple[float, np.ndarray]
+    # type: (Path) -> Tuple[float, np.ndarray]
     """Extracts the initial basis in angstrom from pw.x output."""
+    from scipy import constants
     from pwproc.util import parser_one_line, parser_with_header
 
-    bohr_to_ang = 0.529177
+    bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
     alat_re = re.compile(r"[ \t]+lattice parameter \(alat\)[ \t]+=[ \t]+([\d.]+)[ \t]+a\.u\.")
     basis_head_re = re.compile(r"[ \t]+crystal axes: \(cart. coord. in units of alat\)")
     basis_line_re = re.compile(r"[ \t]+a\([\d]\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
@@ -60,7 +59,7 @@ def get_init_basis(path):
 
 
 def get_init_coord(path):
-    # type: (path) -> Tuple[str, Species, Tau]
+    # type: (Path) -> Tuple[str, Species, Tau]
     """Extracts starting atomic positions."""
     from pwproc.util import parser_with_header
 
@@ -86,6 +85,8 @@ def get_init_coord(path):
         else:
             coord_type = ct
             break
+    else:
+        raise ValueError("Initial coordinates not found.")
 
     spec, pos = zip(*atom_coords)
     pos = np.array(tuple(map(parse_vector, pos)))
@@ -98,25 +99,24 @@ def _count_relax_steps(path):
     """Count the number of completed steps."""
     scf_re = re.compile(r"^ +number of scf cycles += +(?P<scf>[\d]+)$")
     bfgs_re = re.compile(r"^ +number of bfgs steps += +(?P<bfgs>[\d]+)$")
-    last_step_re = re.compile(r"^ +bfgs converged in +(?P<scf>[\d]+) scf"
-                               " cycles and +(?P<bfgs>[\d]+) bfgs steps$")
+    last_step_re = re.compile(r"^ +bfgs converged in +(?P<scf>[\d]+) scf cycles and +(?P<bfgs>[\d]+) bfgs steps$")
 
     steps = []
     last_step = None
 
     with open(path) as f:
         lines = iter(f)
-        for l in lines:
-            m1 = scf_re.match(l)
+        for line in lines:
+            m1 = scf_re.match(line)
             if m1 is not None:
-                nscf = int(m1.group('scf'))
+                n_scf = int(m1.group('scf'))
                 m2 = bfgs_re.match(next(lines))
                 if m2 is None:
                     raise ValueError("Malformed step count")
-                nbfgs = int(m2.group('bfgs'))
-                steps.append((nscf, nbfgs))
+                n_bfgs = int(m2.group('bfgs'))
+                steps.append((n_scf, n_bfgs))
 
-            m3 = last_step_re.match(l)
+            m3 = last_step_re.match(line)
             if m3 is not None:
                 last_step = (int(m3.group('scf')), int(m3.group('bfgs')))
                 break
@@ -127,8 +127,10 @@ def _count_relax_steps(path):
     return len(steps), steps[0][0], steps[-1][0]
 
 
-# ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
-# ParseData = Tuple[Pattern, ParseProcFn]
+# Standard datastructures for parsing output
+ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
+ParseData = Tuple[Pattern, ParseProcFn]
+
 
 def _run_relax_parsers(path, parsers):
     # type: (Path, Mapping[str, ParseData]) -> Mapping[str, List[Any]]
@@ -165,39 +167,42 @@ _all_tags = frozenset(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', '
 
 
 def _get_relax_parsers(tags):
-    # (Iterable[str]) -> Mapping[str, ParseData]
+    # type: (Iterable[str]) -> Mapping[str, ParseData]
     """Defines parsers for requested data types."""
     def _proc_geometry(match, lines, buff):
+        # type: (Match, Iterator[Text], List[Any]) -> None
         atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
         geom_tmp = []
         pos_type = match.group(1)
-        l = next(lines)
-        m = atom_re.match(l)
+        line = next(lines)
+        m = atom_re.match(line)
         while m:
             s, pos = m.groups()
             geom_tmp.append((s, parse_vector(pos)))
-            l = next(lines)
-            m = atom_re.match(l)
+            line = next(lines)
+            m = atom_re.match(line)
         species, tau = zip(*geom_tmp)
         buff.append((pos_type, species, np.array(tau)))
 
     def _proc_basis(_, lines, buff):
+        # type: (Match, Iterator[Text], List[Any]) -> None
         basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
         basis_tmp = []
-        l = next(lines)
-        while basis_row_re.match(l):
-            basis_tmp.append(parse_vector(l))
-            l = next(lines)
+        line = next(lines)
+        while basis_row_re.match(line):
+            basis_tmp.append(parse_vector(line))
+            line = next(lines)
         assert(len(basis_tmp) == 3)
         buff.append(np.array(basis_tmp))
 
     def _proc_press(match, lines, buff):
+        # type: (Match, Iterator[Text], List[Any]) -> None
         press_row_re = re.compile(r"^(?: +-?[.\d]+){6} *$")
         press_tmp = []
-        l = next(lines)
-        while press_row_re.match(l):
-            press_tmp.append(parse_vector(l))
-            l = next(lines)
+        line = next(lines)
+        while press_row_re.match(line):
+            press_tmp.append(parse_vector(line))
+            line = next(lines)
         assert(len(press_tmp) == 3)
         tot_p = float(match.group(1))
         press_tmp = np.array(press_tmp)
@@ -206,14 +211,15 @@ def _get_relax_parsers(tags):
         buff.append((tot_p, press_au, press_bar))
 
     def _proc_mag(match, lines, buff):
+        # type: (Match, Iterator[Text], List[Any]) -> None
         m_tot = float(match.group(1))
-        l = next(lines)
-        m = re.match(r"^ * absolute magnetization += +(-?[.\d]+) +Bohr mag/cell *$", l)
+        line = next(lines)
+        m = re.match(r"^ * absolute magnetization += +(-?[.\d]+) +Bohr mag/cell *$", line)
         assert(m is not None)
         m_abs = float(m.group(1))
         assert(next(lines).strip() == '')
-        l = next(lines)
-        m_conv = re.match(r"^ +convergence has been achieved in +[\d]+ iterations *$", l)
+        line = next(lines)
+        m_conv = re.match(r"^ +convergence has been achieved in +[\d]+ iterations *$", line)
         if m_conv:
             buff.append((m_tot, m_abs))
 
@@ -226,7 +232,7 @@ def _get_relax_parsers(tags):
                         _proc_geometry),
                'force': (re.compile(r"^ *Total force = +([.\d]+) +Total SCF correction = +([.\d]+) *$"),
                          lambda m, _, b: b.append((float(m.group(1)), float(m.group(2))))),
-               'press': (re.compile(r"^ *total   stress .* \(kbar\) +P= +(-?[.\d]+) *$"),
+               'press': (re.compile(r"^ *total {3}stress .* \(kbar\) +P= +(-?[.\d]+) *$"),
                          _proc_press),
                'mag': (re.compile(r"^ *total magnetization += +(-?[.\d]+) +Bohr mag/cell *$"),
                        _proc_mag)
@@ -266,7 +272,7 @@ def _proc_relax_data(buffers, n_steps):
 
         else:
             assert(final_type == 'energy')
-            assert(len(energy) == n_step)
+            assert(len(energy) == n_steps)
             relax_kind = 'relax'
 
     def all_equal(l):
@@ -295,19 +301,19 @@ def _get_relax_data(path, tags, n_steps):
         tags = set()
     else:
         tags = set(tags)
-    tags = tags | _base_tags
+    tags |= _base_tags
     parsers = _get_relax_parsers(tags)
     buffers = _run_relax_parsers(path, parsers)
     return _proc_relax_data(buffers, n_steps)
 
 
-def _proc_geom_buffs(geom_buff: Tuple[str, Iterable[Basis], Species, Iterable[Tau]],
+def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Tau]],
                      geom_init: Tuple[str, float, Basis, Species, Tau],
                      target_coord: str,
                      n_steps: int,
                      relax_kind: str,
                      relax_done: bool
-                    ) -> Tuple[Iterable[Basis], Species, Iterable[Tau]]:
+                     ) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]:
     from itertools import starmap
     from pwproc.util import convert_coords
 
@@ -367,7 +373,7 @@ def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
 def parse_relax(path, tags=None, coord_type='crystal'):
     # type: (Path, Optional[Iterable[str]], str) -> Tuple[Optional[GeometryData], RelaxData]
     """Gather data from pw.x relax run.
-    
+
     :param path: path to pw.x output
     :param tags: Tags to specify which parsers to run on output
     :param coord_type: coordinate type of output
@@ -380,13 +386,13 @@ def parse_relax(path, tags=None, coord_type='crystal'):
 
     # Run parsers on output
     prefix = get_save_file(path)
-    n_steps, istart, iend = _count_relax_steps(path)
+    n_steps, i_start, i_end = _count_relax_steps(path)
 
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
     geom_init = (ctype_i, alat, basis_i, species_i, pos_i)
 
-    energies, final_e, _relax_kind, geom, data_buffs =  _get_relax_data(path, tags, n_steps)
+    energies, final_e, _relax_kind, geom, data_buffs = _get_relax_data(path, tags, n_steps)
     _relax_done = final_e is not None
 
     # Trim data buffers
