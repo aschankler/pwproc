@@ -19,7 +19,7 @@ class GeometryData:
     _tau = None
     _coord_type = None
     _data = None
-    _allowed_data_types = ('energy', 'force', 'press', 'mag')
+    _allowed_data_types = ('energy', 'force', 'press', 'mag', 'fermi')
 
     def __init__(self, prefix, basis, species, tau, coord_type=None, **data):
         self.prefix = prefix

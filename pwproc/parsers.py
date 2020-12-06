@@ -2,18 +2,19 @@
 
 import re
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence, Text, Tuple, List
-from typing import Callable, Iterator, Optional, Pattern, Match, Union
+from typing import Any, Iterable, Mapping, Sequence, Tuple, List
+from typing import Generic, NewType, Optional, Pattern, Match, TypeVar, Union
 import numpy as np
 
-from pwproc.util import parse_vector
+from pwproc.util import parse_vector, LookaheadIter
 
+T = TypeVar('T')
 # Vector of atomic species
-Species = Tuple[str, ...]
+Species = NewType('Species', Tuple[str, ...])
 # Crystal basis [3x3]
-Basis = np.ndarray
+Basis = NewType('Basis', np.ndarray)
 # Position matrix [n_atoms x 3]
-Tau = np.ndarray
+Tau = NewType('Tau', np.ndarray)
 
 
 def get_save_file(path):
@@ -127,118 +128,170 @@ def _count_relax_steps(path):
     return len(steps), steps[0][0], steps[-1][0]
 
 
-# Standard datastructures for parsing output
-ParseProcFn = Callable[[Match, Iterator[Text], List[Any]], None]
-ParseData = Tuple[Pattern, ParseProcFn]
+class ParserBase(Generic[T]):
+    """Base class for local parsers."""
+    header_re: Pattern
+
+    def __init__(self):
+        # type: () -> None
+        self._buffer: List[T] = []
+
+    def __call__(self, lines):
+        # type: (LookaheadIter[str]) -> bool
+        line = lines.top()
+        match = self.header_re.match(line)
+        if match:
+            # Consume the matched line
+            next(lines)
+            self.complete_match(match, lines)
+            return True
+        return False
+
+    @property
+    def buffer(self):
+        # type: () -> List[T]
+        return self._buffer
+
+    def complete_match(self, match, lines):
+        # type: (Match, LookaheadIter[str]) -> None
+        raise NotImplementedError
 
 
-def _run_relax_parsers(path, parsers):
-    # type: (Path, Mapping[str, ParseData]) -> Mapping[str, List[Any]]
-    """Run arbitrary parsers on the pw.x output."""
-    # Set up buffers
-    buffers = {tag: [] for tag in parsers}
+class EnergyParser(ParserBase[float]):
+    header_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
 
-    # Iterate through file
-    with open(path) as f:
-        lines = iter(f)
-        line = next(lines)
-        while True:
-            for tag, parser in parsers.items():
-                header_re, proc_fn = parser
-
-                # Try matching headers
-                match = header_re.match(line)
-
-                # If header match, apply the corresponding parser
-                if match:
-                    proc_fn(match, lines, buffers[tag])
-                    break
-
-            try:
-                line = next(lines)
-            except StopIteration:
-                break
-
-    return buffers
+    def complete_match(self, match, _):
+        # type: (Match, LookaheadIter[str]) -> None
+        self.buffer.append(float(match.group(1)))
 
 
-_base_tags = frozenset(('energy', 'fenergy', 'geom', 'basis'))
-_all_tags = frozenset(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', 'mag'])
+class FEnergyParser(ParserBase[Tuple[str, float]]):
+    header_re = re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry")
+
+    def complete_match(self, match, _):
+        # type: (Match, LookaheadIter[str]) -> None
+        self.buffer.append((match.group(1), float(match.group(2))))
 
 
-def _get_relax_parsers(tags):
-    # type: (Iterable[str]) -> Mapping[str, ParseData]
-    """Defines parsers for requested data types."""
-    def _proc_geometry(match, lines, buff):
-        # type: (Match, Iterator[Text], List[Any]) -> None
-        atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
-        geom_tmp = []
+class GeometryParser(ParserBase[Tuple[str, Species, Tau]]):
+    header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
+    atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
+
+    def complete_match(self, match, lines):
+        # type: (Match, LookaheadIter[str]) -> None
         pos_type = match.group(1)
+        species = []
+        tau = []
         line = next(lines)
-        m = atom_re.match(line)
+        m = self.atom_re.match(line)
         while m:
             s, pos = m.groups()
-            geom_tmp.append((s, parse_vector(pos)))
+            species.append(s)
+            tau.append(parse_vector(pos))
             line = next(lines)
-            m = atom_re.match(line)
-        species, tau = zip(*geom_tmp)
-        buff.append((pos_type, species, np.array(tau)))
+            m = self.atom_re.match(line)
+        species = tuple(species)
+        tau = np.array(tau)
+        self.buffer.append((pos_type, Species(species), Tau(tau)))
 
-    def _proc_basis(_, lines, buff):
-        # type: (Match, Iterator[Text], List[Any]) -> None
-        basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
+
+class BasisParser(ParserBase[Basis]):
+    header_re = re.compile(r"CELL_PARAMETERS \((angstrom)\)")
+    basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
+
+    def complete_match(self, match, lines):
+        # type: (Match, LookaheadIter[str]) -> None
         basis_tmp = []
         line = next(lines)
-        while basis_row_re.match(line):
+        while self.basis_row_re.match(line):
             basis_tmp.append(parse_vector(line))
             line = next(lines)
         assert(len(basis_tmp) == 3)
-        buff.append(np.array(basis_tmp))
+        basis = np.array(basis_tmp)
+        self.buffer.append(Basis(basis))
 
-    def _proc_press(match, lines, buff):
-        # type: (Match, Iterator[Text], List[Any]) -> None
-        press_row_re = re.compile(r"^(?: +-?[.\d]+){6} *$")
+
+class ForceParser(ParserBase[Tuple[float, float]]):
+    header_re = re.compile(r"^ *Total force = +([.\d]+) +Total SCF correction = +([.\d]+) *$")
+
+    def complete_match(self, match, _):
+        # type: (Match, LookaheadIter[str]) -> None
+        self.buffer.append((float(match.group(1)), float(match.group(2))))
+
+
+class PressParser(ParserBase[Tuple[float, np.array, np.array]]):
+    header_re = re.compile(r"^ *total {3}stress .* \(kbar\) +P= +(-?[.\d]+) *$")
+    press_row_re = re.compile(r"^(?: +-?[.\d]+){6} *$")
+
+    def complete_match(self, match, lines):
+        # type: (Match, LookaheadIter[str]) -> None
+        tot_p = float(match.group(1))
         press_tmp = []
+
         line = next(lines)
-        while press_row_re.match(line):
+        while self.press_row_re.match(line):
             press_tmp.append(parse_vector(line))
             line = next(lines)
         assert(len(press_tmp) == 3)
-        tot_p = float(match.group(1))
+
         press_tmp = np.array(press_tmp)
         press_au = press_tmp[:, :3]
         press_bar = press_tmp[:, 3:]
-        buff.append((tot_p, press_au, press_bar))
+        self.buffer.append((tot_p, press_au, press_bar))
 
-    def _proc_mag(match, lines, buff):
-        # type: (Match, Iterator[Text], List[Any]) -> None
+
+class MagParser(ParserBase[Tuple[float, float]]):
+    header_re = re.compile(r"^ *total magnetization += +(-?[.\d]+) +Bohr mag/cell *$")
+    abs_mag_re = re.compile(r"^ * absolute magnetization += +(-?[.\d]+) +Bohr mag/cell *$")
+    conv_re = re.compile(r"^ +convergence has been achieved in +[\d]+ iterations *$")
+
+    def complete_match(self, match, lines):
+        # type: (Match, LookaheadIter[str]) -> None
         m_tot = float(match.group(1))
         line = next(lines)
-        m = re.match(r"^ * absolute magnetization += +(-?[.\d]+) +Bohr mag/cell *$", line)
+        m = self.abs_mag_re.match(line)
         assert(m is not None)
         m_abs = float(m.group(1))
         assert(next(lines).strip() == '')
         line = next(lines)
-        m_conv = re.match(r"^ +convergence has been achieved in +[\d]+ iterations *$", line)
+        m_conv = self.conv_re.match(line)
         if m_conv:
-            buff.append((m_tot, m_abs))
+            self.buffer.append((m_tot, m_abs))
 
-    parsers = {'energy': (re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry"),
-                          lambda m, _, b: b.append(float(m.group(1)))),
-               'fenergy': (re.compile(r"[ \t]+Final (energy|enthalpy)[ \t]+=[ \t]+(-[.\d]+) Ry"),
-                           lambda m, _, b: b.append((m.group(1), float(m.group(2))))),
-               'basis': (re.compile(r"CELL_PARAMETERS \((angstrom)\)"), _proc_basis),
-               'geom': (re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)"),
-                        _proc_geometry),
-               'force': (re.compile(r"^ *Total force = +([.\d]+) +Total SCF correction = +([.\d]+) *$"),
-                         lambda m, _, b: b.append((float(m.group(1)), float(m.group(2))))),
-               'press': (re.compile(r"^ *total {3}stress .* \(kbar\) +P= +(-?[.\d]+) *$"),
-                         _proc_press),
-               'mag': (re.compile(r"^ *total magnetization += +(-?[.\d]+) +Bohr mag/cell *$"),
-                       _proc_mag)
-               }
 
-    return {tag: parsers[tag] for tag in tags}
+class FermiParser(ParserBase[float]):
+    header_re = re.compile(r"[ \t]+the Fermi energy is[ \t]+(-?[.\d]+) ev")
+
+    def complete_match(self, match, _):
+        # type: (Match, LookaheadIter[str]) -> None
+        self.buffer.append(float(match.group(1)))
+
+
+def _run_relax_parsers(path, parsers):
+    # type: (Path, Mapping[str, ParserBase]) -> Mapping[str, List[Any]]
+    """Run arbitrary parsers on the pw.x output."""
+
+    # Iterate through file
+    with open(path) as f:
+        lines = LookaheadIter(f)
+        while True:
+            try:
+                parser_matched = False
+                for parser in parsers.values():
+                    parser_matched &= parser(lines)
+                if not parser_matched:
+                    next(lines)
+            except StopIteration:
+                break
+
+    return {tag: parser.buffer for tag, parser in parsers.items()}
+
+
+_base_tags = frozenset(('energy', 'fenergy', 'geom', 'basis'))
+_all_tags = frozenset(['energy', 'fenergy', 'geom', 'basis', 'force', 'press', 'mag', 'fermi'])
+_parser_map = {'energy': EnergyParser, 'fenergy': FEnergyParser, 'geom': GeometryParser,
+               'basis': BasisParser, 'force': ForceParser, 'press': PressParser,
+               'mag': MagParser, 'fermi': FermiParser}
 
 
 def _proc_relax_data(buffers, n_steps):
@@ -302,7 +355,7 @@ def _get_relax_data(path, tags, n_steps):
     else:
         tags = set(tags)
     tags |= _base_tags
-    parsers = _get_relax_parsers(tags)
+    parsers = {tag: _parser_map[tag]() for tag in tags}
     buffers = _run_relax_parsers(path, parsers)
     return _proc_relax_data(buffers, n_steps)
 
