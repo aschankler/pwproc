@@ -92,7 +92,7 @@ def get_init_coord(path):
     spec, pos = zip(*atom_coords)
     pos = np.array(tuple(map(parse_vector, pos)))
 
-    return coord_type, spec, pos
+    return coord_type, Species(spec), Tau(pos)
 
 
 def _count_relax_steps(path):
@@ -385,10 +385,15 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
     # Check length of buffer
     if relax_done:
         # The final duplicate SCF in vc-relax does not register on the step count
+        # The converged geometry is printed again after SCF at the end of relax
         # However the first geometry is captured in the init_geom buffer
-        expected_len = n_steps - 1 if relax_kind == 'relax' else n_steps
-        if len(pos) != expected_len:
+        if len(pos) != n_steps:
             raise ValueError("Unexpected length for geometry")
+
+        # Remove final duplicate geometry
+        if relax_kind == 'relax':
+            pos = pos[:-1]
+            basis_steps = basis_steps[:-1]
     else:
         # First geometry is not counted here
         if len(pos) == n_steps - 1:
