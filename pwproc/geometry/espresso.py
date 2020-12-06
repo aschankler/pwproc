@@ -9,25 +9,6 @@ Basis = np.ndarray      # Shape: (3, 3)
 Tau = np.ndarray        # Shape: (natoms, 3)
 
 
-class _InfileStack:
-    """Wrapper for an iterator that supports push operations."""
-    def __init__(self, lines):
-        self.lines = iter(lines)
-        self.top = []
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if len(self.top) > 0:
-            return self.top.pop()
-        else:
-            return next(self.lines)
-
-    def push(self, item):
-        self.top.append(item)
-
-
 class NamelistData:
     """Parse lines in a pw.x namelist."""
     def __init__(self, lines):
@@ -160,7 +141,9 @@ def _match_card(lines):
 
 
 def read_pwi(lines):
-    lines = _InfileStack(lines)
+    from pwproc.util import LookaheadIter
+
+    lines = LookaheadIter(lines)
     namelists = []
     cards = []
 

@@ -1,12 +1,12 @@
 """Utilities for use throughout the program.
 
-Defines parser generators and coordinate transformations.
+Defines parser generators and iterator extensions.
 """
 
 import re
 
-from typing import Callable, Iterable, Match, Optional, Pattern, Sequence, \
-                   Tuple, TypeVar, Union
+from typing import Callable, Generic, Iterable, Iterator, Match, Optional, \
+                   Pattern, Sequence, Tuple, TypeVar, Union
 
 S = TypeVar('S')
 T = TypeVar('T')
@@ -89,7 +89,35 @@ def parser_with_header(header_re: Pattern, line_re: Pattern,
     return parser
 
 
-def parse_vector(s, *, num_re=re.compile(r"[\d.-]+")):
-    # type: (str) -> Tuple[float]
+def parse_vector(s: str, *, num_re: Pattern = re.compile(r"[\d.-]+")) -> Tuple[float, ...]:
     """Convert a vector string into a tuple."""
     return tuple(map(float, num_re.findall(s)))
+
+
+class LookaheadIter(Iterator, Generic[T]):
+    """Wrapper for an iterator that supports push and peek operations."""
+    def __init__(self, lines):
+        # type: (Iterable[T]) -> None
+        self.lines = iter(lines)
+        self._top = []
+
+    def __iter__(self):
+        # type: () -> Iterator
+        return self
+
+    def __next__(self):
+        # type: () -> T
+        if len(self._top) > 0:
+            return self._top.pop()
+        else:
+            return next(self.lines)
+
+    def top(self):
+        # type: () -> T
+        if len(self._top) == 0:
+            self._top.append(next(self.lines))
+        return self._top[-1]
+
+    def push(self, item):
+        # type: (T) -> None
+        self._top.append(item)
