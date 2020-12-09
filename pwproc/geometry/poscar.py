@@ -1,14 +1,13 @@
 """Read/write for POSCAR files."""
 
+from typing import Iterable, Iterator, Optional, Tuple
 import numpy as np
 
+from pwproc.geometry import Basis, Species, Tau
 
-# Species = Tuple[str, ...]
-# Basis = np.ndarray[3, 3]
-# Tau = np.ndarray[natoms, 3]
 
 def read_poscar(lines, out_type='angstrom'):
-    # type: (Iterable[Text], str) -> Tuple[Text, Float, Basis, Species, Tau]
+    # type: (Iterable[str], str) -> Tuple[str, float, Basis, Species, Tau]
     from itertools import chain, repeat
     from pwproc.util import parse_vector
     from pwproc.geometry import convert_coords
@@ -30,17 +29,18 @@ def read_poscar(lines, out_type='angstrom'):
     else:
         raise ValueError('Poscar error {}'.format(coord_line))
 
-    pos = [l for l in lines]
+    pos = [line for line in lines]
 
     # parse the basis
-    basis = alat * np.array(tuple(map(parse_vector, basis)))
+    basis = alat * Basis(np.array(tuple(map(parse_vector, basis))))
 
     # Parse the species label
-    species = tuple(zip(s_name.split(), map(int, s_num.split())))
-    species = tuple(chain(*(repeat(s, n) for s, n in species)))
+    species_pairs = tuple(zip(s_name.split(), map(int, s_num.split())))
+    species = tuple(chain(*(repeat(s, n) for s, n in species_pairs)))
+    species = Species(species)
 
     # Parse positions
-    pos = alat * np.array(tuple(map(parse_vector, pos)))
+    pos = alat * Tau(np.array(tuple(map(parse_vector, pos))))
 
     # Convert the input coordinates
     pos = convert_coords(alat, basis, pos, in_type, out_type)
@@ -49,7 +49,7 @@ def read_poscar(lines, out_type='angstrom'):
 
 
 def gen_poscar(basis, species, pos, name=None, alat=1.0):
-    # type: (Basis, Species, Tau, Optional[Text], Float) -> Iterator[Text]
+    # type: (Basis, Species, Tau, Optional[str], float) -> Iterator[str]
     from pwproc.geometry.format_util import format_basis, columns, FORMAT_POS
 
     # Write the basis information
@@ -59,7 +59,7 @@ def gen_poscar(basis, species, pos, name=None, alat=1.0):
     yield format_basis(basis / alat) + '\n'
 
     # Group the positions by species
-    idx = tuple(i[0] for i in sorted(enumerate(species), key=lambda x:x[1]))
+    idx = tuple(i[0] for i in sorted(enumerate(species), key=lambda x: x[1]))
     pos = pos[(idx,)]
 
     # Count each unique species

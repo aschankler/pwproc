@@ -1,7 +1,7 @@
-"""Formating functions for geometry data."""
+"""Formatting functions for geometry data."""
 
 import numpy as np
-from typing import Callable, Sequence, Optional, TypeVar
+from typing import Callable, Iterable, Sequence, Optional, TypeVar
 
 T = TypeVar('T')
 
@@ -28,12 +28,12 @@ def FORMAT_LAT(lat):
 
 def FORMAT_POS(pos):
     # type: (float) -> str
-    """Format componont of atom position."""
+    """Format component of atom position."""
     return _set_precision(pos, POS_WIDTH)
 
 
-def columns(matrix: Sequence[Sequence[T]],
-            minspace: int, lspace: Optional[int] = None,
+def columns(matrix: Iterable[Iterable[T]],
+            min_space: int, lspace: Optional[int] = None,
             s_func: Callable[[T], str] = str, sep: str = ' ',
             align: str = 'front') -> str:
     """Arrange `matrix` into a string with aligned columns.
@@ -42,7 +42,7 @@ def columns(matrix: Sequence[Sequence[T]],
     ----------
     matrix :
         May not be ragged
-    minspace : int
+    min_space : int
         Minimum number of separators between columns
     lspace : int, optional
         Minimum number of leading separators (default `minspace`)
@@ -57,7 +57,7 @@ def columns(matrix: Sequence[Sequence[T]],
     if align != 'front' and align != 'back':
         raise ValueError("Incorrect pad specification")
     if lspace is None:
-        lspace = minspace
+        lspace = min_space
 
     matrix = [list(map(s_func, line)) for line in matrix]
     widths = [max(map(len, col)) for col in zip(*matrix)]
@@ -71,20 +71,21 @@ def columns(matrix: Sequence[Sequence[T]],
                 line.append(extra*sep + item)
             else:
                 line.append(item + extra*sep)
-        acc.append(lspace*sep + (minspace*sep).join(line).rstrip())
+        acc.append(lspace * sep + (min_space * sep).join(line).rstrip())
     return "\n".join(acc)
 
 
 def format_basis(basis):
+    # type: (np.ndarray) -> str
     """Format a basis (3x3 array)."""
-    formater = FORMAT_LAT
-    return columns(basis, minspace=3, s_func=formater)
+    formatter = FORMAT_LAT
+    return columns(basis, min_space=3, s_func=formatter)
 
 
 def format_tau(species, tau):
     # type: (Sequence[str], np.ndarray) -> str
     """Format a list of atomic positions preceded by their species."""
     from itertools import chain, starmap
-    formater = lambda s: FORMAT_POS(s) if isinstance(s, float) else str(s)
+    formatter = lambda s: FORMAT_POS(s) if isinstance(s, float) else str(s)
     mat = starmap(chain, zip(map(lambda x: [x], species), tau))
-    return columns(mat, minspace=3, lspace=0, s_func=formater)
+    return columns(mat, min_space=3, lspace=0, s_func=formatter)

@@ -2,73 +2,81 @@
 
 import re
 import numpy as np
-from typing import Iterator, Optional, Sequence, Tuple, Union
+from typing import ClassVar, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
-Species = Tuple[str, ...]
-Basis = np.ndarray      # Shape: (3, 3)
-Tau = np.ndarray        # Shape: (natoms, 3)
+from pwproc.geometry import Basis, Species, Tau
+from pwproc.util import LookaheadIter
 
 
 class NamelistData:
     """Parse lines in a pw.x namelist."""
+    _kind_re: ClassVar = re.compile(r"^&([a-zA-Z]*)[\s]*$")
+    _field_re: ClassVar = re.compile(r"^[ \t]*([\w]*)[ \t]*=[ \t]*(.*)[\w]*$")
+    _namelist_kinds: ClassVar = frozenset(("CONTROL", "SYSTEM", "ELECTRONS", "IONS", "CELL"))
+
     def __init__(self, lines):
+        # type: (Iterable[str]) -> None
         self.lines = tuple(lines)
-        self.kind = self._get_kind(lines)
-        self.fields = self._get_fields(lines)
+        self.kind = self._get_kind(self.lines)
+        self.fields = self._get_fields(self.lines)
 
     @classmethod
     def _get_kind(cls, lines):
-        kind_re = r"^&([a-zA-Z]*)[\s]*$"
-        allowed_kinds = {"CONTROL", "SYSTEM", "ELECTRONS", "IONS", "CELL"}
-        m = re.match(kind_re, lines[0])
+        # type: (Sequence[str]) -> str
+        m = cls._kind_re.match(lines[0])
         if m is not None:
             kind = m.group(1).upper()
-            if kind in allowed_kinds:
+            if kind in cls._namelist_kinds:
                 return kind
         raise ValueError("Namelist kind " + lines[0])
 
     @classmethod
     def _get_fields(cls, lines):
-        field_re = r"^[ \t]*([\w]*)[ \t]*=[ \t]*(.*)[\w]*$"
+        # type: (Sequence[str]) -> Dict[str, str]
         fields = {}
-        for l in lines[1:-1]:
-            if l.strip() == '' or l.strip()[0] == '!':
+        for line in lines[1:-1]:
+            # Skip comments and blanks
+            if line.strip() == '' or line.strip()[0] == '!':
                 continue
-            m = re.match(field_re, l)
+            m = cls._field_re.match(line)
             if m is not None:
                 fields[m.group(1)] = m.group(2)
+            else:
+                raise ValueError("Error in namelist:\n'{}'".format(line))
         return fields
 
 
 class CardData:
     """Parse lines in a pw.x input card."""
+    _kind_re: ClassVar = re.compile(r"^([\w]+)[ \t]*([\w]+)?[ \t]*$")
+    _card_kinds: ClassVar = frozenset({"ATOMIC_SPECIES", "ATOMIC_POSITIONS", "K_POINTS",
+                                       "CELL_PARAMETERS", "OCCUPATIONS", "CONSTRAINTS", "ATOMIC_FORCES"})
+    _card_units: ClassVar = {'CELL_PARAMETERS': frozenset({'alat', 'bohr', 'angstrom'}),
+                             'ATOMIC_POSITIONS': frozenset({'alat', 'bohr', 'crystal', 'angstrom'}),
+                             'K_POINTS': frozenset({'automatic', 'gamma', 'crystal', 'tpiba',
+                                                    'crystal_b', 'tpiba_b'})}
+
     def __init__(self, lines):
+        # type: (Iterable[str]) -> None
         self.lines = tuple(lines)
-        self.kind, self.unit = self._get_kind(lines[0])
-        self.body = lines[1:]
+        self.kind, self.unit = self._get_kind(self.lines[0])
+        self.body = self.lines[1:]
 
     @classmethod
     def _get_kind(cls, line):
-        kind_re = r"^([\w]+)[ \t]*([\w]+)?[ \t]*$"
-        allowed_kinds = {"ATOMIC_SPECIES", "ATOMIC_POSITIONS", "K_POINTS",
-                         "CELL_PARAMETERS", "OCCUPATIONS", "CONSTRAINTS", "ATOMIC_FORCES"}
-        allowed_units = {'CELL_PARAMETERS': {'alat', 'bohr', 'angstrom'},
-                         'ATOMIC_POSITIONS': {'alat', 'bohr', 'crystal', 'angstrom'},
-                         'K_POINTS': {'automatic'}}
-
-        m = re.match(kind_re, line)
+        # type: (str) -> Tuple[str, str]
+        m = cls._kind_re.match(line)
         if m is None:
             raise ValueError("Card: " + line)
 
         kind = m.group(1).strip().upper()
-        unit = m.group(2)
-        if kind not in allowed_kinds:
+        unit = m.group(2).strip().lower()
+        if kind not in cls._card_kinds:
             raise ValueError("Card: " + kind)
 
-        if kind in allowed_units:
-            if unit not in allowed_units[kind]:
+        if kind in cls._card_units:
+            if unit not in cls._card_units[kind]:
                 raise ValueError("Card: " + line)
-            kind = kind.strip()
         elif unit is not None:
             raise ValueError("Card: " + line)
 
@@ -76,63 +84,66 @@ class CardData:
 
 
 def _match_namelist(lines):
+    # type: (LookaheadIter[str]) -> Union[None, NamelistData]
     """Consume and parse a single namelist from input."""
     namelist_re = r"^&[a-zA-Z]*[\s]*$"
     nl_lines = []
     buff = []
 
     # Ignore blanks and comments
-    l = next(lines)
-    while l.strip() == '' or l.strip()[0] == '!':
-        buff.append(l)
-        l = next(lines)
+    line = next(lines)
+    while line.strip() == '' or line.strip()[0] == '!':
+        buff.append(line)
+        line = next(lines)
 
     # Match start of namelist or abort
-    m = re.match(namelist_re, l)
+    m = re.match(namelist_re, line)
     if m is None:
-        buff.append(l)
-        for l in reversed(buff):
-            lines.push(l)
+        buff.append(line)
+        for line in reversed(buff):
+            lines.push(line)
         return
 
-    while l.strip() != '/':
-        nl_lines.append(l)
-        l = next(lines)
+    while line.strip() != '/':
+        nl_lines.append(line)
+        line = next(lines)
 
-    nl_lines.append(l)
+    nl_lines.append(line)
     return NamelistData(nl_lines)
 
 
 def _match_card(lines):
-    def gather_to_header(lines):
+    # type: (LookaheadIter[str]) -> Union[None, CardData]
+    def gather_to_header():
+        # type: () -> Tuple[str, List[str]]
         header_re = r"(ATOMIC_SPECIES|ATOMIC_POSITIONS|K_POINTS|CELL_PARAMETERS" \
                     r"|CONSTRAINTS|OCCUPATIONS|ATOMIC_FORCES)"
 
         line_buffer = []
         while True:
             try:
-                l = next(lines)
+                line = next(lines)
             except StopIteration:
                 header = None
                 break
 
-            if re.match(header_re, l):
-                header = l
+            if re.match(header_re, line):
+                header = line
                 break
             else:
-                line_buffer.append(l)
+                line_buffer.append(line)
 
         return header, line_buffer
 
     # Consume lines until a card header is reached
-    header, _ = gather_to_header(lines)
+    h_this, _ = gather_to_header()
 
-    if header is None:
+    if h_this is None:
         return
 
     # Gather the rest of the header until the next header or EOF
-    h_next, card_lines = gather_to_header(lines)
-    card_lines = [header] + card_lines
+    h_next, card_lines = gather_to_header()
+    card_lines = [h_this] + card_lines
 
     if h_next:
         lines.push(h_next)
@@ -141,7 +152,7 @@ def _match_card(lines):
 
 
 def read_pwi(lines):
-    from pwproc.util import LookaheadIter
+    # type: (Iterable[str]) -> Tuple[List[NamelistData], List[CardData]]
 
     lines = LookaheadIter(lines)
     namelists = []
@@ -161,14 +172,19 @@ def read_pwi(lines):
 
 
 def parse_pwi_cell(cell_card):
+    # type: (CardData) -> Basis
     """Parse the cell basis."""
     from pwproc.util import parse_vector
     assert(cell_card.kind == 'CELL_PARAMETERS' and cell_card.unit == 'angstrom')
-    basis = [parse_vector(l) for l in cell_card.body if l.strip() != '']
-    return np.array(basis)
+    basis = [parse_vector(el) for el in cell_card.body if el.strip() != '']
+    return Basis(np.array(basis))
+
+
+IfPos = Sequence[Union[None, Tuple[bool, bool, bool]]]
 
 
 def parse_pwi_atoms(atom_card):
+    # type: (CardData) -> Tuple[Species, Tau, Union[IfPos, None]]
     """Parse atomic positions."""
     assert(atom_card.kind == 'ATOMIC_POSITIONS')
     species = []
@@ -185,10 +201,13 @@ def parse_pwi_atoms(atom_card):
         if len(rest) == 6:
             if_pos.append(tuple(map(lambda b: True if b == '1' else False, rest[3:])))
 
+    species = tuple(species)
+    tau = np.array(tau)
+
     if all(ip is None for ip in if_pos):
         if_pos = None
 
-    return species, np.array(tau), if_pos
+    return Species(species), Tau(tau), if_pos
 
 
 def gen_pwi_cell(basis):
@@ -200,7 +219,7 @@ def gen_pwi_cell(basis):
 
 
 def gen_pwi_atoms(species, pos, coord_type, if_pos=None):
-    # type(Species, Tau, str, Optional[Sequence[Union[None, Sequence[bool]]]]) -> Iterator[str]
+    # type: (Species, Tau, str, Optional[IfPos]) -> Iterator[str]
     from itertools import starmap
     from pwproc.geometry.format_util import format_tau
     yield "ATOMIC_POSITIONS {}\n".format(coord_type)
@@ -211,6 +230,7 @@ def gen_pwi_atoms(species, pos, coord_type, if_pos=None):
         assert(len(if_pos) == len(species))
 
         def if_string(ifp):
+            # type: (Optional[Tuple[bool, bool, bool]]) -> str
             if ifp:
                 return "   {}  {}  {}".format(*map(lambda b: int(b), ifp))
             else:
@@ -222,8 +242,8 @@ def gen_pwi_atoms(species, pos, coord_type, if_pos=None):
 
 def gen_pwi(basis: Basis, species: Species, pos: Tau, coord_type: str,
             write_cell: bool = True, write_pos: bool = True,
-            if_pos: Optional[Sequence[Union[None, Sequence[bool]]]] = None
-           ) -> Iterator[str]:
+            if_pos: Optional[IfPos] = None
+            ) -> Iterator[str]:
     """Generate the `CELL_PARAMETERS` and `ATOMIC_POSITIONS` cards.
 
     Basis is assumed to be in angstroms and tau should agree with `coord_type`

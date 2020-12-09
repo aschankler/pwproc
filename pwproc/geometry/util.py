@@ -1,10 +1,18 @@
 """Geometry conversion utilities."""
 
+from typing import NewType, Tuple
 import numpy as np
+
+# Vector of atomic species
+Species = NewType('Species', Tuple[str, ...])
+# Crystal basis [3x3]
+Basis = NewType('Basis', np.ndarray)
+# Position matrix [n_atoms x 3]
+Tau = NewType('Tau', np.ndarray)
 
 
 def convert_coords(alat, basis, tau, in_type, out_type):
-    # type: (float, np.ndarray, np.ndarray, str, str) -> np.ndarray
+    # type: (float, Basis, Tau, str, str) -> Tau
     """Convert coordinate type.
 
     :param alat: lattice parameter in bohr
@@ -26,7 +34,7 @@ def convert_coords(alat, basis, tau, in_type, out_type):
 
 
 def to_crystal(alat, basis, tau, in_type):
-    # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
+    # type: (float, Basis, Tau, str) -> Tau
     """Convert from arbitrary coords to crystal."""
     from scipy import constants
     bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
@@ -42,7 +50,7 @@ def to_crystal(alat, basis, tau, in_type):
 
 
 def from_crystal(alat, basis, tau, out_type):
-    # type: (float, np.ndarray, np.ndarray, str) -> np.ndarray
+    # type: (float, Basis, Tau, str) -> Tau
     """Convert from crystal coords to arbitrary coords."""
     from scipy import constants
     ang_to_bohr = constants.angstrom / constants.value('Bohr radius')

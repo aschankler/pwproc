@@ -1,11 +1,10 @@
 """Read/Write for XSF file format."""
 
 import re
+from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
 import numpy as np
 
-# Species = Tuple[str, ...]
-# Basis = np.ndarray[3, 3]
-# Tau = np.ndarray[natoms, 3]
+from pwproc.geometry import Basis, Species, Tau
 
 
 def _get_next_line(lines):
@@ -14,16 +13,16 @@ def _get_next_line(lines):
     non-blank line is reached
     """
     while True:
-        l = next(lines).strip()
+        line = next(lines).strip()
 
         # Blank line
-        if l == '':
+        if line == '':
             continue
         # Comment line
-        if l[0] == '#':
+        if line[0] == '#':
             continue
 
-        return l.strip()
+        return line.strip()
 
 
 def _match_primvec_header(line):
@@ -42,13 +41,14 @@ def _match_primvec_header(line):
 
 
 def _parse_primvec_content(lines):
+    # type: (Iterator[str]) -> Basis
     from pwproc.util import parse_vector
 
     # Parse the basis
     basis = tuple(next(lines) for _ in range(3))
     basis = np.array(tuple(map(parse_vector, basis)))
 
-    return basis
+    return Basis(basis)
 
 
 def _read_primvec(lines, step=None):
@@ -71,6 +71,7 @@ def _read_first_primvec(lines):
 
     return _parse_primvec_content(lines), animate_cell
 
+
 def _read_primcoord(lines, step=None):
     # type: (Iterator[str], Optional[int]) -> Tuple[Species, Tau]
     # Match header
@@ -87,22 +88,22 @@ def _read_primcoord(lines, step=None):
     # Get number of atoms
     nat = int(re.match(r"([\d]+)[ \t]+1", _get_next_line(lines)).group(1))
 
-    # Read coodinate lines
+    # Read coordinate lines
     coord_lines = [_get_next_line(lines) for _ in range(nat)]
 
     # Parse coordinates and species
     species = []
     tau = []
-    for l in coord_lines:
-        l = l.split()
-        species.append(l[0])
-        tau.append(tuple(map(float, l[1:])))
+    for line in coord_lines:
+        line = line.split()
+        species.append(line[0])
+        tau.append(tuple(map(float, line[1:])))
 
     species = tuple(species)
     tau = np.array(tau)
 
     assert(len(tau) == len(species) == nat)
-    return species, tau
+    return Species(species), Tau(tau)
 
 
 def _read_xsf_single(lines):
@@ -115,7 +116,7 @@ def _read_xsf_single(lines):
 
 
 def _read_xsf_animate(lines, nsteps):
-    # type: (Iterator[str], int) -> Tuple[Sequence[Basis], species, Sequence[Tau]]
+    # type: (Iterator[str], int) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]
     # Decide if animating the cell
     b, animate_cell = _read_first_primvec(lines)
 
@@ -140,29 +141,29 @@ def _read_xsf_animate(lines, nsteps):
 
 
 def read_xsf(lines):
-    # type: (Iterable[Text]) -> Tuple[Basis, Species, Tau]
+    # type: (Iterable[str]) -> Tuple[Basis, Species, Tau]
     lines = iter(lines)
-    l = _get_next_line(lines)
+    line = _get_next_line(lines)
 
     animate_re = r"ANIMSTEPS[ \t]+([\d]+)"
 
-    if re.match(animate_re, l):
+    if re.match(animate_re, line):
         # Reading an animation
-        nsteps = re.match(animate_re, l).group(1)
-        nsteps = int(nsteps)
-        l = _get_next_line(lines)
-        assert(l == 'CRYSTAL')
-        b, s, t = _read_xsf_animate(lines, nsteps)
+        n_steps = re.match(animate_re, line).group(1)
+        n_steps = int(n_steps)
+        line = _get_next_line(lines)
+        assert(line == 'CRYSTAL')
+        b, s, t = _read_xsf_animate(lines, n_steps)
     else:
         # Reading a single structure
-        assert(l == 'CRYSTAL')
+        assert(line == 'CRYSTAL')
         b, s, t = _read_xsf_single(lines)
 
     return b, s, t
 
 
 def gen_xsf(basis, species, tau, write_header=True, step=None):
-    # type: (Basis, Species, Tau, bool) -> Iterator[Text]
+    # type: (Basis, Species, Tau, bool, Optional[int]) -> Iterator[str]
     from pwproc.geometry.format_util import format_basis, format_tau
 
     nat = len(species)
@@ -180,7 +181,7 @@ def gen_xsf(basis, species, tau, write_header=True, step=None):
 
 
 def gen_xsf_animate(basis, species, tau):
-    # type: (Sequence[basis], Species, Sequence[Tau]) -> Iterator[Text]
+    # type: (Sequence[Basis], Species, Sequence[Tau]) -> Iterator[str]
     from itertools import chain
 
     nsteps = len(basis)

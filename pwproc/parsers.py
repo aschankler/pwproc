@@ -2,19 +2,16 @@
 
 import re
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence, Tuple, List
-from typing import Generic, NewType, Optional, Pattern, Match, TypeVar, Union
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence, Tuple, \
+    List, Generic, Optional, Pattern, Match, TypeVar, Union
 import numpy as np
 
+from pwproc.geometry import Basis, Species, Tau, GeometryData, RelaxData
 from pwproc.util import parse_vector, LookaheadIter
 
 T = TypeVar('T')
-# Vector of atomic species
-Species = NewType('Species', Tuple[str, ...])
-# Crystal basis [3x3]
-Basis = NewType('Basis', np.ndarray)
-# Position matrix [n_atoms x 3]
-Tau = NewType('Tau', np.ndarray)
+# pos_type, basis, species, tau
+RawGeometry = Tuple[str, Sequence[Basis], Species, Sequence[Tau]]
 
 
 def get_save_file(path):
@@ -33,7 +30,7 @@ def get_save_file(path):
 
 
 def get_init_basis(path):
-    # type: (Path) -> Tuple[float, np.ndarray]
+    # type: (Path) -> Tuple[float, Basis]
     """Extracts the initial basis in angstrom from pw.x output."""
     from scipy import constants
     from pwproc.util import parser_one_line, parser_with_header
@@ -47,13 +44,14 @@ def get_init_basis(path):
     basis_parser = parser_with_header(basis_head_re, basis_line_re, lambda m: parse_vector(m.group(1)))
 
     with open(path) as f:
-        alat = alat_parser(f)
+        alat: float = alat_parser(f)
+        # TODO: Remove seek and run parsers in correct order
         f.seek(0)
         basis = basis_parser(f)
 
     # Convert basis from alat to angstrom
     assert len(basis) == 3
-    basis = np.array(basis)
+    basis = Basis(np.array(basis))
     basis *= alat * bohr_to_ang
 
     return alat, basis
@@ -294,17 +292,21 @@ _parser_map = {'energy': EnergyParser, 'fenergy': FEnergyParser, 'geom': Geometr
                'mag': MagParser, 'fermi': FermiParser}
 
 
+# energy, final_en, relax_kind, geometry, data_buffers
+_RawParsed = Tuple[Sequence[float], Optional[float], Optional[str], RawGeometry, Dict[str, Sequence]]
+
+
 def _proc_relax_data(buffers, n_steps):
-    # type: (Mapping[str, Sequence[Any]], int) -> Any
+    # type: (Mapping[str, Sequence[Any]], int) -> _RawParsed
     tags = set(buffers)
     assert(_base_tags <= tags)
     assert(tags <= _all_tags)
 
     # Deal with energies first
-    energy = buffers['energy']
+    energy: Sequence[float] = buffers['energy']
 
-    final_en = None
-    relax_kind = None
+    final_en: Optional[float] = None
+    relax_kind: Optional[str] = None
     assert(len(buffers['fenergy']) < 2)
     if len(buffers['fenergy']) == 1:
         final_type, final_en = buffers['fenergy'][0]
@@ -328,8 +330,9 @@ def _proc_relax_data(buffers, n_steps):
             assert(len(energy) == n_steps)
             relax_kind = 'relax'
 
-    def all_equal(l):
-        return l.count(l[0]) == len(l)
+    def all_equal(seq):
+        # type: (List) -> bool
+        return seq.count(seq[0]) == len(seq)
 
     # Re-package geometry
     pos_type, species, pos = zip(*buffers['geom'])
@@ -338,7 +341,7 @@ def _proc_relax_data(buffers, n_steps):
     bases = buffers['basis']
     if len(bases) > 0:
         assert(len(bases) == len(pos))
-    geometry = (pos_type, bases, species, pos)
+    geometry: RawGeometry = (pos_type, bases, species, pos)
 
     # Save the other buffers
     data_buffers = {}
@@ -349,7 +352,7 @@ def _proc_relax_data(buffers, n_steps):
 
 
 def _get_relax_data(path, tags, n_steps):
-    # type: (Path, Union[Iterable[str], None], int) -> Any
+    # type: (Path, Union[Iterable[str], None], int) -> _RawParsed
     if tags is None:
         tags = set()
     else:
@@ -409,7 +412,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
 
 
 def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
-    # type: (Mapping[str, Sequence[Any]], int, str, bool) -> Mapping[str, Sequence[Any]]
+    # type: (MutableMapping[str, Sequence[Any]], int, str, bool) -> MutableMapping[str, Sequence[Any]]
 
     if relax_done:
         # The final duplicate SCF in vc-relax does not register in step count
@@ -440,7 +443,6 @@ def parse_relax(path, tags=None, coord_type='crystal'):
         final_data: None if relaxation did not finish, else a data object
         relax_data: Object with data from each step
     """
-    from pwproc.geometry import GeometryData, RelaxData
 
     # Run parsers on output
     prefix = get_save_file(path)
