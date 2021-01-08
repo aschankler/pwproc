@@ -75,11 +75,11 @@ def columns(matrix: Iterable[Iterable[T]],
     return "\n".join(acc)
 
 
-def format_basis(basis):
+def format_basis(basis, lspace=None):
     # type: (np.ndarray) -> str
     """Format a basis (3x3 array)."""
     formatter = FORMAT_LAT
-    return columns(basis, min_space=3, s_func=formatter)
+    return columns(basis, minspace=3, s_func=formatter, lspace=lspace)
 
 
 def format_tau(species, tau):
