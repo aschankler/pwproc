@@ -21,10 +21,10 @@ def read_poscar(lines, out_type='angstrom'):
     s_num = next(lines)
 
     # Read atomic positions
-    coord_line = next(lines).strip()
-    if coord_line == 'Direct':
+    coord_line = next(lines).strip().lower()
+    if coord_line == 'direct':
         in_type = 'crystal'
-    elif coord_line == 'Cartesian':
+    elif coord_line == 'cartesian':
         in_type = 'angstrom'
     else:
         raise ValueError('Poscar error {}'.format(coord_line))
