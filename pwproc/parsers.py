@@ -180,14 +180,13 @@ class GeometryParser(ParserBase[Tuple[str, Species, Tau]]):
         pos_type = match.group(1)
         species = []
         tau = []
-        line = next(lines)
-        m = self.atom_re.match(line)
+        m = self.atom_re.match(lines.top())
         while m:
+            lines.pop()
             s, pos = m.groups()
             species.append(s)
             tau.append(parse_vector(pos))
-            line = next(lines)
-            m = self.atom_re.match(line)
+            m = self.atom_re.match(lines.top())
         species = tuple(species)
         tau = np.array(tau)
         self.buffer.append((pos_type, Species(species), Tau(tau)))
@@ -200,10 +199,9 @@ class BasisParser(ParserBase[Basis]):
     def complete_match(self, match, lines):
         # type: (Match, LookaheadIter[str]) -> None
         basis_tmp = []
-        line = next(lines)
-        while self.basis_row_re.match(line):
+        while self.basis_row_re.match(lines.top()):
+            line = lines.pop()
             basis_tmp.append(parse_vector(line))
-            line = next(lines)
         assert(len(basis_tmp) == 3)
         basis = np.array(basis_tmp)
         self.buffer.append(Basis(basis))

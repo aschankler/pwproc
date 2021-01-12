@@ -107,6 +107,10 @@ class LookaheadIter(Iterator, Generic[T]):
 
     def __next__(self):
         # type: () -> T
+        return self.pop()
+
+    def pop(self):
+        # type: () -> T
         if len(self._top) > 0:
             return self._top.pop()
         else:
