@@ -1,6 +1,6 @@
 """Data structures for holding geometry data."""
 
-from typing import Any, Dict, Final, Iterable, Iterator, Optional, \
+from typing import Any, Dict, Tuple, Iterable, Iterator, Optional, \
     Sequence, Sized, Union
 
 from pwproc.geometry.util import Basis, Species, Tau
@@ -10,7 +10,7 @@ class GeometryDataBase:
     """Base class for crystal structure data."""
     _prefix: str = None
     _coord_type: str = None
-    _allowed_data_types: Final = ('energy', 'force', 'press', 'mag', 'fermi')
+    _allowed_data_types: Tuple = ('energy', 'force', 'press', 'mag', 'fermi')
     _basis: Union[Basis, Sequence[Basis]] = None
     _species: Species = None
     _tau: Union[Tau, Sequence[Tau]] = None
