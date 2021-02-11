@@ -56,9 +56,19 @@ def _format_data_output(tag, fmt, data, data_len):
 def write_data(d_file, dtags, data, endpt):
     # type: (TextIO, Iterable[str], Mapping[str, GeometryData], str) -> None
     """Write additional data to file."""
+    def _force_fmt(args):
+        p = 3
+        force, scf_corr = args
+        if abs(scf_corr) > 10**-p:
+            corr_fstr = '{{:0{:d}.{:d}f}}'.format(p+2, p)
+        else:
+            corr_fstr = '{{:0{:d}.{:d}e}}'.format(p+5, p-1)
+
+        corr_fmt = corr_fstr.format(scf_corr)
+        return '{:05.3f}  {}'.format(force, corr_fmt)
+
     formatters = {'energy': ("Energy (Ry)", lambda en: str(en)),
-                  'force': ('Total force   SCF correction  (Ry/au)',
-                            lambda f: '{:05.3f}  {:05.3f}'.format(*f)),
+                  'force': ('Total force   SCF correction  (Ry/au)', _force_fmt),
                   'press': ('Total Press.  Max Press.  (kbar)',
                             lambda p: "{: .2f}  {: .2f}".format(p[0], np.abs(p[2]).max())),
                   'mag': ('Total mag.  Abs. mag.  (Bohr mag/cell)',
