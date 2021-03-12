@@ -9,6 +9,10 @@ import numpy as np
 from pwproc.geometry import Basis, Species, Tau, GeometryData, RelaxData
 from pwproc.util import parse_vector, LookaheadIter
 
+
+class ParserError(RuntimeError): pass
+
+
 T = TypeVar('T')
 # pos_type, basis, species, tau
 RawGeometry = Tuple[str, Sequence[Basis], Species, Sequence[Tau]]
@@ -25,7 +29,9 @@ def get_save_file(path):
     with open(path) as f:
         prefix = save_parser(f)
 
-    assert(prefix is not None)
+    if prefix is None:
+        raise ParserError("Could not find calculation prefix")
+
     return prefix
 
 
@@ -85,7 +91,7 @@ def get_init_coord(path):
             coord_type = ct
             break
     else:
-        raise ValueError("Initial coordinates not found.")
+        raise ParserError("Initial coordinates not found.")
 
     spec, pos = zip(*atom_coords)
     pos = np.array(tuple(map(parse_vector, pos)))
@@ -113,7 +119,7 @@ def _count_relax_steps(path):
                 n_scf = int(m1.group('scf'))
                 m2 = bfgs_re.match(next(lines))
                 if m2 is None:
-                    raise ValueError("Malformed step count")
+                    raise ParserError("Malformed step count")
                 n_bfgs = int(m2.group('bfgs'))
                 steps.append((n_scf, n_bfgs))
 
@@ -125,7 +131,7 @@ def _count_relax_steps(path):
             m4 = zero_mag_re.match(line)
             if m4 is not None:
                 if zero_mag_relax:
-                    raise ValueError("Two zero-magnetization relaxations")
+                    raise ParserError("Two zero-magnetization relaxations")
                 zero_mag_relax = True
 
     if last_step is not None:
@@ -336,9 +342,10 @@ def _proc_relax_data(buffers, n_steps, zmag_relax):
             else:
                 # In this case, the final SCF step was interrupted
                 final_en = None
-        else:
-            assert(final_type == 'energy')
+        elif final_type == 'energy':
             relax_kind = 'relax'
+        else:
+            raise ParserError("Unknown final energy type")
 
     if zmag_relax:
         if len(energy) == n_steps + 1:
@@ -347,7 +354,8 @@ def _proc_relax_data(buffers, n_steps, zmag_relax):
             # The magnetization check was interrupted
             zmag_relax = False
 
-    assert(len(energy) == n_steps)
+    if len(energy) != n_steps:
+        raise ParserError("Incorrect length in energy buffer")
 
     def all_equal(seq):
         # type: (List) -> bool
@@ -416,7 +424,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
         # The converged geometry is printed again after SCF at the end of relax
         # However the first geometry is captured in the init_geom buffer
         if len(pos) != n_steps:
-            raise ValueError("Unexpected length for geometry")
+            raise ParserError("Unexpected length for geometry")
 
         # Remove final duplicate geometry
         if relax_kind == 'relax':
@@ -431,7 +439,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
             pos = pos[:-1]
             basis_steps = basis_steps[:-1]
         else:
-            raise ValueError("Unexpected length for geometry")
+            raise ParserError("Unexpected length for geometry")
 
     return (basis_i,) + basis_steps, species, (pos_i,) + pos
 
@@ -461,7 +469,7 @@ def _trim_data_buffs(buffers, relax_dims):
                 # This qty was written for a step that did not finish
                 buffers[tag] = buffers[tag][:-1]
             else:
-                raise ValueError("Unexpected length for {!r} buffer".format(tag))
+                raise ParserError("Unexpected length for {!r} buffer".format(tag))
 
     return buffers
 
