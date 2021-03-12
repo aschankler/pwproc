@@ -16,6 +16,9 @@ def parse_args(args):
     parser.add_argument('in_file', nargs='?', type=FileType('r'), default=sys.stdin)
     parser.add_argument('out_file', nargs='?', type=FileType('w'), default=sys.stdout)
 
+    # Whether to substitute keys strictly
+    parser.add_argument('--permissive', action='store_true')
+
     # Set locations to load variables
     parser.add_argument('--use_env', action='store_true')
     parser.add_argument('--use_file', '-f', action='append', type=Path)
@@ -47,12 +50,15 @@ def parse_args(args):
     return parsed
 
 
-def substitute(tmplt_str, subs):
-    # type: (str, Substitutions) -> str
+def substitute(tmplt_str, subs, permissive=False):
+    # type: (str, Substitutions, bool) -> str
     from string import Template
     
     template = Template(tmplt_str)
-    return template.substitute(subs)
+    if not permissive:
+        return template.substitute(subs)
+    else:
+        return template.safe_substitute(subs)
 
 
 def load_file(path):
@@ -118,7 +124,7 @@ def template(args):
     tmpl = args.in_file.read()
 
     # Do the substitution and write result
-    out_str = substitute(tmpl, substitutions)
+    out_str = substitute(tmpl, substitutions, permissive=args.permissive)
     args.out_file.write(out_str)
 
     # Close in/out files
