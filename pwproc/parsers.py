@@ -94,14 +94,16 @@ def get_init_coord(path):
 
 
 def _count_relax_steps(path):
-    # type: (Path) -> Tuple[int, int, int]
+    # type: (Path) -> Tuple[int, int, int, bool]
     """Count the number of completed steps."""
     scf_re = re.compile(r"^ +number of scf cycles += +(?P<scf>[\d]+)$")
     bfgs_re = re.compile(r"^ +number of bfgs steps += +(?P<bfgs>[\d]+)$")
     last_step_re = re.compile(r"^ +bfgs converged in +(?P<scf>[\d]+) scf cycles and +(?P<bfgs>[\d]+) bfgs steps$")
+    zero_mag_re = re.compile(r"^ +lsda relaxation :  a final configuration with zero *$")
 
     steps = []
     last_step = None
+    zero_mag_relax = False
 
     with open(path) as f:
         lines = iter(f)
@@ -120,10 +122,16 @@ def _count_relax_steps(path):
                 last_step = (int(m3.group('scf')), int(m3.group('bfgs')))
                 break
 
+            m4 = zero_mag_re.match(line)
+            if m4 is not None:
+                if zero_mag_relax:
+                    raise ValueError("Two zero-magnetization relaxations")
+                zero_mag_relax = True
+
     if last_step is not None:
         steps.append(last_step)
 
-    return len(steps), steps[0][0], steps[-1][0]
+    return len(steps), steps[0][0], steps[-1][0], zero_mag_relax
 
 
 class ParserBase(Generic[T]):
@@ -290,12 +298,14 @@ _parser_map = {'energy': EnergyParser, 'fenergy': FEnergyParser, 'geom': Geometr
                'mag': MagParser, 'fermi': FermiParser}
 
 
-# energy, final_en, relax_kind, geometry, data_buffers
-_RawParsed = Tuple[Sequence[float], Optional[float], Optional[str], RawGeometry, Dict[str, Sequence]]
+# energy, final_en, relax_kind, geometry, data_buffers, zmag_relax
+_RawParsed = Tuple[Sequence[float], Optional[float], Optional[str], RawGeometry, Dict[str, Sequence], bool]
+# n_steps, _relax_kind, _relax_done, _zmag_relax
+_RelaxDims = Tuple[int, Optional[str], bool, bool]
 
 
-def _proc_relax_data(buffers, n_steps):
-    # type: (Mapping[str, Sequence[Any]], int) -> _RawParsed
+def _proc_relax_data(buffers, n_steps, zmag_relax):
+    # type: (Mapping[str, Sequence[Any]], int, bool) -> _RawParsed
     tags = set(buffers)
     assert(_base_tags <= tags)
     assert(tags <= _all_tags)
@@ -312,21 +322,32 @@ def _proc_relax_data(buffers, n_steps):
         # If vc-relax, the true final energy is run in a new scf calculation,
         # which is captured in the `energy` buffer. The `fenergy` buffer has
         # a duplicate of last relaxation SCF step, which is discarded.
+
+        # A zero-magnetization check occurs before the BFGS completes, so it
+        # is possible to have an extra entry even if the final energy parsers
+        # are not triggered. Thus, we strip this entry after the final energy
+        # routine but before the buffer length check.
         if final_type == 'enthalpy':
             relax_kind = 'vcrelax'
-            if len(energy) == n_steps + 1:
+            expected_len = n_steps + 1 if not zmag_relax else n_steps + 2
+            if len(energy) == expected_len:
                 final_en = energy[-1]
                 energy = energy[:-1]
-            elif len(energy) == n_steps:
+            else:
                 # In this case, the final SCF step was interrupted
                 final_en = None
-            else:
-                raise ValueError("Unexpected length in energy buffer")
-
         else:
             assert(final_type == 'energy')
-            assert(len(energy) == n_steps)
             relax_kind = 'relax'
+
+    if zmag_relax:
+        if len(energy) == n_steps + 1:
+            energy = energy[:-1]
+        else:
+            # The magnetization check was interrupted
+            zmag_relax = False
+
+    assert(len(energy) == n_steps)
 
     def all_equal(seq):
         # type: (List) -> bool
@@ -346,11 +367,11 @@ def _proc_relax_data(buffers, n_steps):
     for t in tags - _base_tags:
         data_buffers[t] = buffers[t]
 
-    return energy, final_en, relax_kind, geometry, data_buffers
+    return energy, final_en, relax_kind, geometry, data_buffers, zmag_relax
 
 
-def _get_relax_data(path, tags, n_steps):
-    # type: (Path, Union[Iterable[str], None], int) -> _RawParsed
+def _get_relax_data(path, tags, n_steps, zmag_relax):
+    # type: (Path, Union[Iterable[str], None], int, bool) -> _RawParsed
     if tags is None:
         tags = set()
     else:
@@ -358,15 +379,13 @@ def _get_relax_data(path, tags, n_steps):
     tags |= _base_tags
     parsers = {tag: _parser_map[tag]() for tag in tags}
     buffers = _run_relax_parsers(path, parsers)
-    return _proc_relax_data(buffers, n_steps)
+    return _proc_relax_data(buffers, n_steps, zmag_relax)
 
 
 def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Tau]],
                      geom_init: Tuple[str, float, Basis, Species, Tau],
                      target_coord: str,
-                     n_steps: int,
-                     relax_kind: str,
-                     relax_done: bool
+                     relax_dims: _RelaxDims
                      ) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]:
     from itertools import starmap
     from pwproc.geometry import convert_coords
@@ -382,6 +401,14 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
     basis_steps = (basis_i,) * len(pos) if len(basis_steps) == 0 else tuple(basis_steps)
     pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, ctype, target_coord),
                         zip(basis_steps, pos)))
+
+    # Unpack relax dimensions
+    n_steps, relax_kind, relax_done, zmag_relax = relax_dims
+
+    # The geometry is unchanged in a magnetization check, just eliminate the last
+    if zmag_relax:
+        pos = pos[:-1]
+        basis_steps = basis_steps[:-1]
 
     # Check length of buffer
     if relax_done:
@@ -400,7 +427,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
         if len(pos) == n_steps - 1:
             pass
         elif len(pos) == n_steps:
-            # Geometry written for a step that did ont finish
+            # Geometry written for a step that did not finish
             pos = pos[:-1]
             basis_steps = basis_steps[:-1]
         else:
@@ -409,8 +436,11 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
     return (basis_i,) + basis_steps, species, (pos_i,) + pos
 
 
-def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
-    # type: (MutableMapping[str, Sequence[Any]], int, str, bool) -> MutableMapping[str, Sequence[Any]]
+def _trim_data_buffs(buffers, relax_dims):
+    # type: (MutableMapping[str, Sequence[Any]], _RelaxDims) -> MutableMapping[str, Sequence[Any]]
+
+    # Unpack relax dims
+    n_steps, relax_kind, relax_done, zmag_relax = relax_dims
 
     if relax_done:
         # The final duplicate SCF in vc-relax does not register in step count
@@ -419,6 +449,13 @@ def _trim_data_buffs(buffers, n_steps, relax_kind, relax_done):
         expected_len = n_steps
 
     for tag in buffers:
+        if zmag_relax:
+            if relax_kind == 'vcrelax' and relax_done:
+                # We want to keep the result from the final scf in a vc-relax
+                del buffers[tag][-2]
+            else:
+                buffers[tag] = buffers[tag][:-1]
+
         if len(buffers[tag]) != expected_len:
             if not relax_done and len(buffers[tag]) == expected_len + 1:
                 # This qty was written for a step that did not finish
@@ -441,22 +478,25 @@ def parse_relax(path, tags=None, coord_type='crystal'):
         final_data: None if relaxation did not finish, else a data object
         relax_data: Object with data from each step
     """
+    # TODO: Replace typed tuples in returns/params with more explicit datastructure
 
     # Run parsers on output
     prefix = get_save_file(path)
-    n_steps, i_start, i_end = _count_relax_steps(path)
+    n_steps, i_start, i_end, _zmag_relax = _count_relax_steps(path)
 
     alat, basis_i = get_init_basis(path)
     ctype_i, species_i, pos_i = get_init_coord(path)
     geom_init = (ctype_i, alat, basis_i, species_i, pos_i)
 
-    energies, final_e, _relax_kind, geom, data_buffs = _get_relax_data(path, tags, n_steps)
+    _relax_data = _get_relax_data(path, tags, n_steps, _zmag_relax)
+    energies, final_e, _relax_kind, geom, data_buffs, _zmag_relax = _relax_data
     _relax_done = final_e is not None
+    _relax_dims: _RelaxDims = (n_steps, _relax_kind, _relax_done, _zmag_relax)
 
     # Trim data buffers
-    geom_buffs = _proc_geom_buffs(geom, geom_init, coord_type, n_steps, _relax_kind, _relax_done)
+    geom_buffs = _proc_geom_buffs(geom, geom_init, coord_type, _relax_dims)
     basis, species, tau = geom_buffs
-    data_buffs = _trim_data_buffs(data_buffs, n_steps, _relax_kind, _relax_done)
+    data_buffs = _trim_data_buffs(data_buffs, _relax_dims)
 
     # Decide if relaxation finished
     if _relax_done:
