@@ -22,6 +22,7 @@ def do_rattle_atoms(species, tau, which_atoms=None, if_pos=None, abs_scale=None)
 
 
 def do_rattle_cell(basis, rel_scale=None, abs_scale=None):
+    # TODO: this disrupts the atomic positions if they are not in crystal coord.
     if abs_scale is None and rel_scale is None:
         abs_scale = 0.1
     if abs_scale:
@@ -32,7 +33,7 @@ def do_rattle_cell(basis, rel_scale=None, abs_scale=None):
     return basis + noise
 
 
-def do_rattle_pwi(namelists, cards, rattle_cell=False, which_atoms=None):
+def do_rattle_pwi(namelists, cards, rattle_cell=False, which_atoms=None, scale=None):
     from pwproc.geometry import parse_pwi_cell, parse_pwi_atoms
     from pwproc.geometry import gen_pwi_atoms, gen_pwi_cell
 
@@ -46,7 +47,7 @@ def do_rattle_pwi(namelists, cards, rattle_cell=False, which_atoms=None):
         yield '\n'
         if ca.kind == 'ATOMIC_POSITIONS':
             species, tau, if_pos = parse_pwi_atoms(ca)
-            tau = do_rattle_atoms(species, tau,
+            tau = do_rattle_atoms(species, tau, abs_scale=scale,
                                   which_atoms=which_atoms, if_pos=if_pos)
             yield from gen_pwi_atoms(species, tau, ca.unit, if_pos=if_pos)
         elif ca.kind == 'CELL_PARAMETERS':
@@ -61,10 +62,10 @@ def do_rattle_pwi(namelists, cards, rattle_cell=False, which_atoms=None):
     yield '\n'
 
 
-def do_rattle_xsf(basis, species, tau, which_atoms=None, rattle_cell=False):
+def do_rattle_xsf(basis, species, tau, which_atoms=None, rattle_cell=False, scale=None):
     from pwproc.geometry import gen_xsf
 
-    tau = do_rattle_atoms(species, tau, which_atoms=which_atoms)
+    tau = do_rattle_atoms(species, tau, which_atoms=which_atoms, abs_scale=scale)
     if rattle_cell:
         basis = do_rattle_cell(basis)
 
@@ -85,6 +86,7 @@ def parse_args_rattle(args):
 
     parser.add_argument('-e', '--element', action='append', dest='which_atoms')
     parser.add_argument('--cell', action='store_true', dest='rattle_cell')
+    parser.add_argument('--scale', type=float)
 
     return parser.parse_args(args)
 
@@ -115,7 +117,8 @@ def rattle(args):
         for i in range(args.n):
             out_data = do_rattle_pwi(namelists, cards,
                                       rattle_cell=args.rattle_cell,
-                                      which_atoms=args.which_atoms)
+                                      which_atoms=args.which_atoms,
+                                      scale=args.scale)
             with open(out_path(i), 'w') as f:
                 f.writelines(out_data)
 
@@ -125,7 +128,8 @@ def rattle(args):
 
         for i in range(args.n):
             out_data = do_rattle_xsf(*geom, rattle_cell=args.rattle_cell,
-                                     which_atoms=args.which_atoms)
+                                     which_atoms=args.which_atoms,
+                                     scale=args.scale)
 
             with open(out_path(i), 'w') as f:
                 f.writelines(out_data)
