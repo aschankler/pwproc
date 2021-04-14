@@ -133,6 +133,9 @@ def parse_args(args):
     endpt.add_argument('--final', dest='endpoint', action='store_const',
                        const='final', help="Save data only for the final"
                        " structure. Warn if relaxation did not finish")
+    endpt.add_argument('--last', dest='endpoint', action='store_const',
+                       const='last', help="Save data for the last structure, "
+                       "even if the relaxation did not finish")
     endpt.add_argument('--initial', dest='endpoint', action='store_const',
                        const='initial', help="Save data only for the initial"
                        " structure")
@@ -156,6 +159,11 @@ def relax(args):
                 out_data[prefix] = final
         elif args.endpoint == 'initial':
             out_data[prefix] = relax.get_init()
+        elif args.endpoint == 'last':
+            if final is None:
+                out_data[prefix] = relax[-1]
+            else:
+                out_data[prefix] = final
         else:
             out_data[prefix] = relax
 
