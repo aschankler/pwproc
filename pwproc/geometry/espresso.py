@@ -11,7 +11,7 @@ from pwproc.util import LookaheadIter
 class NamelistData:
     """Parse lines in a pw.x namelist."""
     _kind_re: ClassVar = re.compile(r"^&([a-zA-Z]*)[\s]*$")
-    _field_re: ClassVar = re.compile(r"^[ \t]*([\w]*)[ \t]*=[ \t]*(.*)[\w]*$")
+    _field_re: ClassVar = re.compile(r"^[ \t]*([()\w]*)[ \t]*=[ \t]*(.*)[\w]*$")
     _namelist_kinds: ClassVar = frozenset(("CONTROL", "SYSTEM", "ELECTRONS", "IONS", "CELL"))
 
     def __init__(self, lines):
@@ -42,7 +42,7 @@ class NamelistData:
             if m is not None:
                 fields[m.group(1)] = m.group(2)
             else:
-                raise ValueError("Error in namelist:\n'{}'".format(line))
+                raise ValueError("Error in namelist:\n'{}'".format(line.strip()))
         return fields
 
 
@@ -70,11 +70,12 @@ class CardData:
             raise ValueError("Card: " + line)
 
         kind = m.group(1).strip().upper()
-        unit = m.group(2).strip().lower()
+        unit = m.group(2)
         if kind not in cls._card_kinds:
             raise ValueError("Card: " + kind)
 
         if kind in cls._card_units:
+            unit = unit.strip().lower()
             if unit not in cls._card_units[kind]:
                 raise ValueError("Card: " + line)
         elif unit is not None:

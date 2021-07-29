@@ -6,6 +6,15 @@ import numpy as np
 from pwproc.geometry import Basis, Species, Tau
 
 
+def content_lines(lines):
+    # type: (Iterable[str]) -> Iterator[str]
+    """Only contains non-blank lines of the input."""
+    for line in lines:
+        line = line.strip()
+        if line != '':
+            yield line
+
+
 def read_poscar(lines, out_type='angstrom'):
     # type: (Iterable[str], str) -> Tuple[str, float, Basis, Species, Tau]
     from itertools import chain, repeat
@@ -13,7 +22,7 @@ def read_poscar(lines, out_type='angstrom'):
     from pwproc.geometry import convert_coords
 
     # Read data from input
-    lines = iter(lines)
+    lines = content_lines(lines)
     name = next(lines).strip()
     alat = float(next(lines))
     basis = tuple(next(lines) for _ in range(3))
