@@ -81,7 +81,7 @@ def parse_args_berry(args):
     return parser.parse_args(args)
 
 
-def berry(args):
+def run_berry(args):
     from pathlib import Path
     pol_data = parse_berry_output(args.in_file)
 
@@ -107,4 +107,4 @@ if __name__ == '__main__':
     import sys
 
     args = parse_args_berry(sys.argv[1:])
-    berry(args)
+    run_berry(args)

@@ -75,7 +75,7 @@ def do_rattle_xsf(basis, species, tau, which_atoms=None, rattle_cell=False, scal
 def parse_args_rattle(args):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser()
+    parser = ArgumentParser(prog="pwproc rattle")
     parser.add_argument('infile', type=Path)
     parser.add_argument('-n', type=int, action='store', default=1)
     parser.add_argument('--out', action='store', type=Path)
@@ -91,7 +91,7 @@ def parse_args_rattle(args):
     return parser.parse_args(args)
 
 
-def rattle(args):
+def run_rattle(args):
     from pwproc.geometry import read_pwi, read_xsf
 
     if args.out:
@@ -141,5 +141,5 @@ def rattle(args):
 if __name__ == '__main__':
     import sys
     args = parse_args_rattle(sys.argv[1:])
-    rattle(args)
+    run_rattle(args)
 

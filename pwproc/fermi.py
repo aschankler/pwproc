@@ -35,7 +35,7 @@ def write_fermi(outfile, data, write_all=False):
             outfile.write("{}: {}\n".format(prefix, fe[-1]))
 
 
-def parse_args(args):
+def parse_args_fermi(args):
     # type: (Sequence[str]) -> Namespace
     """Parse comandline arguments for fermi subcommand."""
     import sys
@@ -50,7 +50,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def fermi(args):
+def run_fermi(args):
     # type: (Namespace) -> None
     """Execute fermi command."""
     from pwproc.parsers import get_save_file
@@ -64,5 +64,5 @@ def fermi(args):
 
 if __name__ == '__main__':
     import sys
-    args = parse_args(sys.argv[1:])
-    fermi(args)
+    args = parse_args_fermi(sys.argv[1:])
+    run_fermi(args)

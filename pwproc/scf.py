@@ -41,7 +41,7 @@ def parse_scf(path, coord_type='crystal'):
                         energy=energy, coord_type=coord_type)
 
 
-def parse_args(args):
+def parse_args_scf(args):
     """Argument parser for `scf` subcommand."""
     from argparse import ArgumentParser, FileType
     parser = ArgumentParser(prog='pwproc scf',
@@ -59,7 +59,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def scf(args):
+def run_scf(args):
     """Execute `scf` subcommand."""
     data = {}
     for p in args.in_file:
@@ -82,5 +82,5 @@ def scf(args):
 if __name__ == '__main__':
     import sys
 
-    args = parse_args(sys.argv[1:])
-    scf(args)
+    args = parse_args_scf(sys.argv[1:])
+    run_scf(args)

@@ -126,7 +126,7 @@ def save_bands(kpath, kpts, bands, csv_path=None, npz_path=None):
             writer.writerows(map(lambda x: chain(*x), zip(kpath.reshape(-1,1), kpts, bands)))
 
 
-def parse_args(args):
+def parse_args_bands(args):
     from argparse import ArgumentParser
 
     parser = ArgumentParser(prog='pwproc bands',
@@ -182,6 +182,6 @@ def run_bands(args):
 
 if __name__ == '__main__':
     import sys
-    args = parse_args(sys.argv[1:])
+    args = parse_args_bands(sys.argv[1:])
     run_bands(args)
 

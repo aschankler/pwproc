@@ -102,7 +102,7 @@ def write_xsf(xsf, data):
             xsf_f.writelines(geom_data.to_xsf())
 
 
-def parse_args(args):
+def parse_args_relax(args):
     """Argument parser for `relax` subcommand."""
     import sys
     from argparse import ArgumentParser, FileType
@@ -143,7 +143,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def relax(args):
+def run_relax(args):
     """Main function for `relax` subcommand."""
     # Parse the output files
     relax_data = parse_files(args.in_file, args.dtags)
@@ -179,5 +179,5 @@ def relax(args):
 
 if __name__ == '__main__':
     import sys
-    args = parse_args(sys.argv[1:])
-    relax(args)
+    args = parse_args_relax(sys.argv[1:])
+    run_relax(args)
