@@ -26,6 +26,7 @@ def run_cli(cli_args):
         return
 
     sub_cmd = cli_args[1]
+    cli_args = cli_args[2:]
 
     if sub_cmd == "scf":
         from pwproc.scf import parse_args_scf, run_scf
