@@ -2,8 +2,10 @@
 Parser for pw.x bands output files.
 """
 
-import numpy as np
 import re
+from pathlib import Path
+
+import numpy as np
 
 from pwproc.util import parse_vector
 
@@ -108,13 +110,29 @@ def kpath_coord(kpt_list):
     return kcoord
 
 
+def save_bands(kpath, kpts, bands, csv_path=None, npz_path=None):
+    """Save band data in csv or npz format."""
+
+    if npz_path is not None:
+        np.savez(npz_path, kpath=kpath, kpoints=kpts, bands=bands)
+
+    if csv_path is not None:
+        import csv
+        from itertools import chain
+        with open(csv_path, 'w') as f:
+            writer = csv.writer(f)
+            nbands = bands.shape[1]
+            writer.writerow(['kpath', 'kpoint', None, None, 'bands'] + [None]*nbands)
+            writer.writerows(map(lambda x: chain(*x), zip(kpath.reshape(-1,1), kpts, bands)))
+
+
 def parse_args(args):
     from argparse import ArgumentParser
 
     parser = ArgumentParser(prog='pwproc bands',
                             description="Parse output from bands.x and pw.x")
 
-    parser.add_argument('in_file', action='store', help="pw.x or bands.x output file")
+    parser.add_argument('in_file', action='store', type=Path, help="pw.x or bands.x output file")
     in_grp = parser.add_mutually_exclusive_group()
     in_grp.add_argument('--bands', action='store_const', const='bands', dest='in_type',
                         help="Output is from bands.x")
@@ -123,20 +141,33 @@ def parse_args(args):
     out_grp = parser.add_argument_group(title='Output',
                          description="Output files record kpoint coordinates, band" \
                          " energies, and progress on a continuous path coordinate")
-    out_grp.add_argument('--npz', action='store', metavar="FILE",
+    out_grp.add_argument('--npz', nargs='?', type=Path, const=True, metavar="FILE",
                          help="Write data in npz format")
-    out_grp.add_argument('--csv', action='store', metavar="FILE",
+    out_grp.add_argument('--csv', nargs='?', type=Path, const=True, metavar="FILE",
                          help="Write data to csv file")
 
-    return parser.parse_args(args)
-
-
-if __name__ == '__main__':
-    import sys
-    args = parse_args(sys.argv[1:])
+    # Apply defaults
+    args = parser.parse_args(args)
     if args.in_type is None:
         args.in_type = 'pwx'
 
+    def gen_out_path(out_path, ext):
+        if out_path and not isinstance(out_path, Path):
+            strippable_ext = ('.dat', '.out')
+            if args.in_file.suffix in strippable_ext:
+                return args.in_file.with_suffix(ext)
+            else:
+                return args.in_file.with_name(args.in_file.name + ext)
+        else:
+            return out_path
+
+    args.npz = gen_out_path(args.npz, '.npz')
+    args.csv = gen_out_path(args.csv, '.csv')
+
+    return args
+
+
+def run_bands(args):
     with open(args.in_file, 'r') as f:
         if args.in_type == 'pwx':
             kpt, bands = parse_pwx_out(f)
@@ -146,15 +177,11 @@ if __name__ == '__main__':
             raise ValueError
 
     kpath = kpath_coord(kpt)
+    save_bands(kpath, kpt, bands, npz_path=args.npz, csv_path=args.csv)
 
-    if args.npz is not None:
-        np.savez(args.npz, kpath=kpath, kpoints=kpt, bands=bands)
 
-    if args.csv is not None:
-        import csv
-        from itertools import chain
-        with open(args.csv, 'w') as f:
-            writer = csv.writer(f)
-            nbands = bands.shape[1]
-            writer.writerow(['kpath', 'kpoint', None, None, 'bands'] + [None]*nbands)
-            writer.writerows(map(lambda x: chain(*x), zip(kpath.reshape(-1,1), kpt, bands)))
+if __name__ == '__main__':
+    import sys
+    args = parse_args(sys.argv[1:])
+    run_bands(args)
+
