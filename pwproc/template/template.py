@@ -4,7 +4,7 @@
 #Substitutions = Mapping[str, str]
 
 
-def parse_args(args):
+def parse_args_template(args):
     # type: (Iterable[str]) -> Namespace
     import sys
     from argparse import ArgumentParser, Action, FileType
@@ -114,7 +114,7 @@ def update_subs(sub_dict, files=None, paste_files=None, use_env=False):
     return new_subs
 
 
-def template(args):
+def run_template(args):
     # type: (Namespace) -> None
 
     # Get substitutions from all sources
@@ -134,7 +134,6 @@ def template(args):
 
 if __name__ == '__main__':
     import sys
-    args = parse_args(sys.argv[1:])
-
-    template(args)
+    args = parse_args_template(sys.argv[1:])
+    run_template(args)
 
