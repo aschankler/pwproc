@@ -3,5 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Build files
+/build
+/dist
+*.egg-info/
+
 # Jupyter Notebook
 .ipynb_checkpoints
