@@ -1,16 +1,19 @@
+"""Basic template processor."""
 
-#from argparse import Namespace
-#from typing import Iterable, Mapping, Any
-#Substitutions = Mapping[str, str]
+import os
+import sys
+from argparse import Namespace
+from pathlib import Path
+from typing import Iterable, Mapping, Optional, Sequence
+
+Substitutions = Mapping[str, str]
 
 
 def parse_args_template(args):
-    # type: (Iterable[str]) -> Namespace
-    import sys
-    from argparse import ArgumentParser, Action, FileType
-    from pathlib import Path
+    # type: (Sequence[str]) -> Namespace
+    from argparse import Action, ArgumentParser, FileType
 
-    parser = ArgumentParser(prog="pwproc template" )
+    parser = ArgumentParser(prog="pwproc template")
 
     # Get in/out file handles
     parser.add_argument('in_file', nargs='?', type=FileType('r'), default=sys.stdin)
@@ -27,8 +30,10 @@ def parse_args_template(args):
     class ParseVar(Action):
         def __call__(self, parser, namespace, values, option_string=None):
 
-            if not values.count('=') == 1:
-                raise parser.error("Variable declaration must be in the form '{}'".format(self.metavar))
+            if not values.count("=") == 1:
+                raise parser.error(
+                    "Variable declaration must be in the form '{}'".format(self.metavar)
+                )
 
             values = values.split('=')
             var_list = getattr(namespace, self.dest)
@@ -53,7 +58,7 @@ def parse_args_template(args):
 def substitute(tmplt_str, subs, permissive=False):
     # type: (str, Substitutions, bool) -> str
     from string import Template
-    
+
     template = Template(tmplt_str)
     if not permissive:
         return template.substitute(subs)
@@ -74,7 +79,9 @@ def load_file(path):
     code = compile(source, str(path), 'exec')
     exec(code, ctx)
 
-    return {k: v for k, v in ctx.items() if (not k.startswith('_')) and (type(v) is str)}
+    return {
+        k: v for k, v in ctx.items() if (not k.startswith("_")) and isinstance(v, str)
+    }
 
 
 def update_subs(sub_dict, files=None, paste_files=None, use_env=False):
@@ -82,7 +89,6 @@ def update_subs(sub_dict, files=None, paste_files=None, use_env=False):
     """Updates substitution dict from files and env.
      Priority is cmdline args > vars from file > vars from env.
     """
-    import os
 
     # Capture vars from environment
     if use_env:
@@ -132,8 +138,11 @@ def run_template(args):
     args.out_file.close()
 
 
-if __name__ == '__main__':
-    import sys
-    args = parse_args_template(sys.argv[1:])
-    run_template(args)
+def template_cli(args):
+    # type: (Sequence[str]) -> None
+    parsed_args = parse_args_template(args)
+    run_template(parsed_args)
 
+
+if __name__ == "__main__":
+    template_cli(sys.argv[1:])

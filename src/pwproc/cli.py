@@ -53,9 +53,9 @@ def run_cli(cli_args):
         args = parse_args_rattle(cli_args)
         run_rattle(args)
     elif sub_cmd == "template":
-        from pwproc.template import parse_args_template, run_template
-        args = parse_args_template(cli_args)
-        run_template(args)
+        from pwproc.template import template_cli
+
+        template_cli(cli_args)
     elif sub_cmd in ("help", "--help", "-h"):
         show_usage()
     else:

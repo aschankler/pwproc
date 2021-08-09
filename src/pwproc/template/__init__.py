@@ -1,2 +1,2 @@
 
-from pwproc.template.template import run_template, parse_args_template
+from pwproc.template.template import template_cli
