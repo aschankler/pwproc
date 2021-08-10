@@ -3,8 +3,7 @@
 import sys
 
 def show_usage():
-    usage = """
-    Usage: pwproc [subcommand] [args]
+    usage = """Usage: pwproc [subcommand] [args]
 
     Subcommands:
         scf
@@ -54,12 +53,12 @@ def run_cli(cli_args):
         run_rattle(args)
     elif sub_cmd == "template":
         from pwproc.template import template_cli
-
         template_cli(cli_args)
     elif sub_cmd in ("help", "--help", "-h"):
         show_usage()
     else:
         show_usage()
+        sys.exit(1)
 
 
 def cli():
