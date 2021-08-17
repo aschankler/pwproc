@@ -134,17 +134,41 @@ def parse_args_bands(args):
 
     parser.add_argument('in_file', action='store', type=Path, help="pw.x or bands.x output file")
     in_grp = parser.add_mutually_exclusive_group()
-    in_grp.add_argument('--bands', action='store_const', const='bands', dest='in_type',
-                        help="Output is from bands.x")
-    in_grp.add_argument('--pwx', action='store_const', const='pwx', dest='in_type',
-                        help="Output is from pw.x (default)")
-    out_grp = parser.add_argument_group(title='Output',
-                         description="Output files record kpoint coordinates, band" \
-                         " energies, and progress on a continuous path coordinate")
-    out_grp.add_argument('--npz', nargs='?', type=Path, const=True, metavar="FILE",
-                         help="Write data in npz format")
-    out_grp.add_argument('--csv', nargs='?', type=Path, const=True, metavar="FILE",
-                         help="Write data to csv file")
+    in_grp.add_argument(
+        "--bands",
+        action="store_const",
+        const="bands",
+        dest="in_type",
+        help="Output is from bands.x",
+    )
+    in_grp.add_argument(
+        "--pwx",
+        action="store_const",
+        const="pwx",
+        dest="in_type",
+        help="Output is from pw.x (default)",
+    )
+    out_grp = parser.add_argument_group(
+        title="Output",
+        description="Output files record kpoint coordinates, band"
+        " energies, and progress on a continuous path coordinate",
+    )
+    out_grp.add_argument(
+        "--npz",
+        nargs="?",
+        type=Path,
+        const=Path.cwd(),
+        metavar="FILE",
+        help="Write data in npz format",
+    )
+    out_grp.add_argument(
+        "--csv",
+        nargs="?",
+        type=Path,
+        const=Path.cwd(),
+        metavar="FILE",
+        help="Write data to csv file",
+    )
 
     # Apply defaults
     args = parser.parse_args(args)
@@ -152,12 +176,15 @@ def parse_args_bands(args):
         args.in_type = 'pwx'
 
     def gen_out_path(out_path, ext):
-        if out_path and not isinstance(out_path, Path):
+        if out_path is not None and out_path.is_dir():
+            out_path = out_path.joinpath(args.in_file.name)
+
+            # Modify the output extension
             strippable_ext = ('.dat', '.out')
-            if args.in_file.suffix in strippable_ext:
-                return args.in_file.with_suffix(ext)
+            if out_path.suffix in strippable_ext:
+                return out_path.with_suffix(ext)
             else:
-                return args.in_file.with_name(args.in_file.name + ext)
+                return out_path.with_name(out_path.name + ext)
         else:
             return out_path
 
