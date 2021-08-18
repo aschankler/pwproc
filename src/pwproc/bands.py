@@ -173,7 +173,7 @@ def parse_args_bands(args):
     # Apply defaults
     args = parser.parse_args(args)
     if args.in_type is None:
-        args.in_type = 'pwx'
+        args.in_type = "bands"
 
     def gen_out_path(out_path, ext):
         if out_path is not None and out_path.is_dir():
