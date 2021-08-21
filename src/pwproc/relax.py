@@ -1,5 +1,7 @@
 """Parser for pw.x relax output."""
 
+from typing import Iterable, Set, Tuple
+
 import numpy as np
 
 
@@ -107,46 +109,131 @@ def parse_args_relax(args):
     import sys
     from argparse import ArgumentParser, FileType
     from pathlib import Path
-    parser = ArgumentParser(prog='pwproc relax',
-                            description="Parser for relax and vc-relax output.")
 
-    parser.add_argument('in_file', action='store', nargs='+', type=Path,
-                        metavar='FILE', help="List of pw.x output files")
-    parser.add_argument('--xsf', action='store', metavar='FILE',
-                        help="Write xsf structures to file. The key `{PREFIX}`"
-                        " in FILE is replaced by the calculation prefix")
-    parser.add_argument('--data', action='store', type=FileType('w'),
-                        default=sys.stdout, metavar='FILE',
-                        help="Output file for structure data")
-    data_grp = parser.add_argument_group("Data fields", "Specify additional"
-                                         " data to gather from output files")
-    data_grp.add_argument('--energy', '-e', action='append_const', dest='dtags',
-                          const='energy', help="Write energy (in Ry)")
-    data_grp.add_argument('--force', '-f', action='append_const', dest='dtags',
-                          const='force', help="Output force data")
-    data_grp.add_argument('--press', '-p', action='append_const', dest='dtags',
-                          const='press', help="Output pressure data")
-    data_grp.add_argument('--mag', '-m', action='append_const', dest='dtags',
-                          const='mag', help="Output magnetization data")
+    parser = ArgumentParser(
+        prog="pwproc relax", description="Parser for relax and vc-relax output."
+    )
+
+    parser.add_argument(
+        "in_file",
+        action="store",
+        nargs="+",
+        type=Path,
+        metavar="FILE",
+        help="List of pw.x output files",
+    )
+    parser.add_argument(
+        "--xsf",
+        action="store",
+        metavar="FILE",
+        help="Write xsf structures to file. The key `{PREFIX}` in FILE is replaced by the calculation prefix",
+    )
+    parser.add_argument(
+        "--data",
+        action="store",
+        type=FileType("w"),
+        default=sys.stdout,
+        metavar="FILE",
+        help="Output file for structure data",
+    )
+    data_grp = parser.add_argument_group(
+        "Data fields", "Specify additional data to gather from output files"
+    )
+    data_grp.add_argument(
+        "--energy",
+        "-e",
+        action="append_const",
+        dest="dtags",
+        const="energy",
+        help="Write energy (in Ry)",
+    )
+    data_grp.add_argument(
+        "--force",
+        "-f",
+        action="append_const",
+        dest="dtags",
+        const="force",
+        help="Output force data",
+    )
+    data_grp.add_argument(
+        "--press",
+        "-p",
+        action="append_const",
+        dest="dtags",
+        const="press",
+        help="Output pressure data",
+    )
+    data_grp.add_argument(
+        "--mag",
+        "-m",
+        action="append_const",
+        dest="dtags",
+        const="mag",
+        help="Output magnetization data",
+    )
+    data_grp.add_argument(
+        "--volume",
+        "-v",
+        action="append_const",
+        dest="dtags",
+        const="vol",
+        help="Output unit cell volume",
+    )
+
+    def lat_param_type(value):
+        # type: (str) -> Tuple[str, int]
+        _param_names = ("a", "b", "c", "alpha", "beta", "gamma")
+        value = value.strip().lower()
+        if value not in _param_names:
+            raise ValueError
+        return "lat", _param_names.index(value)
+
+    data_grp.add_argument(
+        "--lat",
+        action="append",
+        type=lat_param_type,
+        dest="dtags",
+        help="Output unit cell parameter",
+    )
 
     endpt = parser.add_mutually_exclusive_group()
-    endpt.add_argument('--final', dest='endpoint', action='store_const',
-                       const='final', help="Save data only for the final"
-                       " structure. Warn if relaxation did not finish")
-    endpt.add_argument('--last', dest='endpoint', action='store_const',
-                       const='last', help="Save data for the last structure, "
-                       "even if the relaxation did not finish")
-    endpt.add_argument('--initial', dest='endpoint', action='store_const',
-                       const='initial', help="Save data only for the initial"
-                       " structure")
+    endpt.add_argument(
+        "--final",
+        dest="endpoint",
+        action="store_const",
+        const="final",
+        help="Save data only for the final structure. Warn if relaxation did not finish",
+    )
+    endpt.add_argument(
+        "--last",
+        dest="endpoint",
+        action="store_const",
+        const="last",
+        help="Save data for the last structure, even if the relaxation did not finish",
+    )
+    endpt.add_argument(
+        "--initial",
+        dest="endpoint",
+        action="store_const",
+        const="initial",
+        help="Save data only for the initial structure",
+    )
 
     return parser.parse_args(args)
+
+
+def _get_parser_tags(dtags):
+    # type: (Iterable[Union[str, Tuple]]) -> Set[str]
+    _parser_tags = ("energy", "force", "press", "mag", "fermi")
+    # Only pass on some data tags to the parser
+    return set(tag for tag in dtags if tag in _parser_tags)
 
 
 def run_relax(args):
     """Main function for `relax` subcommand."""
     # Parse the output files
-    relax_data = parse_files(args.in_file, args.dtags)
+    parser_tags = _get_parser_tags(args.dtags)
+    relax_data = parse_files(args.in_file, parser_tags)
 
     # Take the desired step
     out_data = {}
