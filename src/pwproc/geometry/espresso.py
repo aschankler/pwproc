@@ -1,11 +1,28 @@
 """Read/write for Quantum ESPRESSO input files."""
 
 import re
+from typing import (
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    NewType,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
+
 import numpy as np
-from typing import ClassVar, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, Union
+import scipy.constants  # type: ignore[import]
 
 from pwproc.geometry import Basis, Species, Tau
 from pwproc.util import LookaheadIter
+
+# CellDM as defined by `pw.x`
+CellDM = NewType("CellDM", Tuple[float, float, float, float, float, float])
 
 
 class NamelistData:
@@ -257,3 +274,173 @@ def gen_pwi(basis: Basis, species: Species, pos: Tau, coord_type: str,
     # Yield atomic positions
     if write_pos:
         yield from gen_pwi_atoms(species, pos, coord_type, if_pos)
+
+
+def cell_dimensions(basis):
+    # type: (Basis) -> CellDM
+    """Return celldm as used by QuantumEspresso."""
+    vec1 = basis[0]
+    vec2 = basis[1]
+    vec3 = basis[2]
+
+    len_1 = np.linalg.norm(vec1)
+    len_2 = np.linalg.norm(vec2)
+    len_3 = np.linalg.norm(vec3)
+
+    cdm = [0.0 for _ in range(6)]
+
+    # Convert angstrom -> bohr
+    cdm[0] = len_1 * scipy.constants.angstrom / scipy.constants.value("Bohr radius")
+
+    cdm[1] = len_2 / len_1
+    cdm[2] = len_3 / len_1
+
+    cdm[3] = np.abs(np.dot(vec2, vec3)) / (len_2 * len_3)
+    cdm[4] = np.abs(np.dot(vec1, vec3)) / (len_1 * len_3)
+    cdm[5] = np.abs(np.dot(vec1, vec2)) / (len_1 * len_2)
+
+    return CellDM(tuple(cdm))
+
+
+def get_ibrav(celldm):
+    # type: (CellDM) -> int
+    """Returns the Bravis lattice type as defined by pw.x"""
+    # pylint: disable=too-many-return-statements
+    def close(_a, _b):
+        # type: (float, float) -> bool
+        return bool(np.isclose(_a, _b))
+
+    if any(not close(c, 0.0) for c in celldm[3:]):
+        orthogonal = [close(c, 0.0) for c in celldm[3:]]
+        if orthogonal.count(True) < 2:
+            # Triclinic
+            return 14
+        if orthogonal.count(True) != 2:
+            raise ValueError
+
+        if close(celldm[5], 0.5) and close(celldm[1], 1.0):
+            # Hexagonal
+            return 4
+        else:
+            if not orthogonal[2]:
+                # Monoclinic, c unique, ab not orthogonal
+                return 12
+            elif not orthogonal[1]:
+                # Monoclinic, b unique, ac not orthogonal
+                return -12
+            else:
+                raise ValueError("Invalid monoclinic cell; bc not orthogonal.")
+    elif close(celldm[1], 1.0) and close(celldm[2], 1.0):
+        # Cubic
+        return 1
+    elif close(celldm[1], 1.0):
+        # Tetragonal
+        return 6
+    else:
+        # Orthorhombic
+        return 8
+
+
+# Function type to define approximate equality
+_CloseFn = Callable[[float, float], bool]
+
+
+def _is_perp(vec1, vec2, close):
+    # type: (np.ndarray, np.ndarray, _CloseFn) -> bool
+    cos_theta = np.dot(vec1, vec2) / np.linalg.norm(vec1) / np.linalg.norm(vec2)
+    return close(cos_theta, 1.0)
+
+
+def _is_orthogonal(vec1, vec2, close):
+    # type: (np.ndarray, np.ndarray, _CloseFn) -> bool
+    cos_theta = np.dot(vec1, vec2) / np.linalg.norm(vec1) / np.linalg.norm(vec2)
+    return close(cos_theta, 0.0)
+
+
+def _check_orthorhombic(basis, close):
+    # type: (Basis, _CloseFn) -> bool
+    check = True
+    check &= _is_perp(basis[0], np.array([1, 0, 0]), close)
+    check &= _is_perp(basis[1], np.array([0, 1, 0]), close)
+    check &= _is_perp(basis[2], np.array([0, 0, 1]), close)
+    return check
+
+
+def _check_tetragonal(basis, close):
+    # type: (Basis, _CloseFn) -> bool
+    check = True
+    check &= _check_orthorhombic(basis, close)
+    b_over_a = np.linalg.norm(basis[1]) / np.linalg.norm(basis[0])
+    check &= close(b_over_a, 1.0)
+    return check
+
+
+def _check_cubic(basis, close):
+    # type: (Basis, _CloseFn) -> bool
+    b_over_a = np.linalg.norm(basis[1]) / np.linalg.norm(basis[0])
+    c_over_a = np.linalg.norm(basis[2]) / np.linalg.norm(basis[0])
+    check = True
+    check &= _check_orthorhombic(basis, close)
+    check &= close(b_over_a, 1.0)
+    check &= close(c_over_a, 1.0)
+    return check
+
+
+def _check_hexagonal(basis, close):
+    # type: (Basis, _CloseFn) -> bool
+    check = True
+    check &= _is_perp(basis[0], np.array([1, 0, 0]), close)
+    check &= _is_perp(basis[1], np.array([-0.5, np.sqrt(3) / 2, 0]), close)
+    check &= _is_perp(basis[2], np.array([0, 0, 1]), close)
+    return check
+
+
+def _check_monoclinic(basis, b_unique, close):
+    # type: (Basis, bool, _CloseFn) -> bool
+    check = True
+    check &= _is_perp(basis[0], np.array([1, 0, 0]), close)
+    if b_unique:
+        check &= _is_perp(basis[1], np.array([0, 1, 0]), close)
+        check &= _is_orthogonal(basis[2], np.array([0, 1, 0]), close)
+    else:
+        check &= _is_orthogonal(basis[1], np.array([0, 0, 1]), close)
+        check &= _is_perp(basis[2], np.array([0, 0, 1]), close)
+    return check
+
+
+def _check_triclinic(basis, close):
+    # type: (Basis, _CloseFn) -> bool
+    check = True
+    check &= _is_perp(basis[0], np.array([1, 0, 0]), close)
+    check &= _is_orthogonal(basis[1], np.array([0, 0, 1]), close)
+    return check
+
+
+def check_canonical(basis, ibrav, close=None):
+    # type: (Basis, int, Optional[_CloseFn]) -> bool
+    """Verify that the basis aligns with the coordinate vectors."""
+
+    def _close(_a, _b):
+        # type: (float, float) -> bool
+        return bool(np.isclose(_a, _b))
+
+    if close is None:
+        close = _close
+
+    if ibrav == 1:
+        return _check_cubic(basis, close)
+    elif ibrav == 4:
+        return _check_hexagonal(basis, close)
+    elif ibrav == 6:
+        return _check_tetragonal(basis, close)
+    elif ibrav == 8:
+        return _check_orthorhombic(basis, close)
+    elif ibrav in (12, -12):
+        b_unique = ibrav == -12
+        return _check_monoclinic(basis, b_unique, close)
+    elif ibrav == 14:
+        return _check_triclinic(basis, close)
+    elif ibrav in (2, 3, -3, 5, -5, 7, 9, -9, 91, 10, 11, 13, -13):
+        raise NotImplementedError(f"ibrav = {ibrav}")
+    else:
+        raise ValueError(f"Bad ibrav = {ibrav}")
