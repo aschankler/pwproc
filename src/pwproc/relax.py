@@ -1,6 +1,19 @@
 """Parser for pw.x relax output."""
 
-from typing import Iterable, Set, Tuple
+from argparse import Namespace
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    TextIO,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 
@@ -105,9 +118,10 @@ def write_xsf(xsf, data):
 
 
 def parse_args_relax(args):
+    # type: (Sequence[str]) -> Namespace
     """Argument parser for `relax` subcommand."""
     import sys
-    from argparse import ArgumentParser, FileType
+    from argparse import Action, ArgumentParser, FileType
     from pathlib import Path
 
     parser = ArgumentParser(
@@ -186,14 +200,79 @@ def parse_args_relax(args):
         value = value.strip().lower()
         if value not in _param_names:
             raise ValueError
-        return "lat", _param_names.index(value)
+        return value, _param_names.index(value)
+
+    class ExtraDataAction(Action):
+        # pylint: disable=too-many-arguments,too-few-public-methods
+        _extra_data_dest = "extra_data"
+
+        # noinspection PyShadowingBuiltins
+        def __init__(
+            # pylint: disable=redefined-builtin
+            self,
+            option_strings: Sequence[str],
+            dest: str,
+            nargs: Optional[Union[int, str]] = None,
+            const: Any = None,
+            default: Any = None,
+            type: Union[Callable[[str], Any], FileType, None] = None,
+            choices: Optional[Iterable[Any]] = None,
+            required: bool = False,
+            help: Optional[str] = None,
+            metavar: Optional[Union[str, Tuple[str, ...]]] = None,
+        ):
+            if nargs is None:
+                raise ValueError("nargs may not be None")
+            if nargs == 0:
+                raise ValueError("nargs must be nonzero")
+            super().__init__(
+                option_strings=option_strings,
+                dest=dest,
+                nargs=nargs,
+                const=const,
+                default=default,
+                type=type,
+                choices=choices,
+                required=required,
+                help=help,
+                metavar=metavar,
+            )
+
+        def __call__(
+            self,
+            parser: ArgumentParser,
+            namespace: Namespace,
+            values: Union[str, Sequence[Any], None],
+            option_string: Optional[str] = None,
+        ) -> None:
+            # Add flag to main group
+            items = getattr(namespace, self.dest, None)
+            items = [] if items is None else items
+            if self.const not in items:
+                items.append(self.const)
+            setattr(namespace, self.dest, items)
+
+            # Add extra data info
+            extra_data = getattr(namespace, self._extra_data_dest, None)
+            extra_data = {} if extra_data is None else extra_data
+            if self.const in extra_data:
+                for val in values:
+                    if val not in extra_data[self.const]:
+                        extra_data[self.const].append(val)
+            else:
+                extra_data[self.const] = values
+            setattr(namespace, self._extra_data_dest, extra_data)
 
     data_grp.add_argument(
         "--lat",
-        action="append",
+        "-L",
+        action=ExtraDataAction,
         type=lat_param_type,
         dest="dtags",
-        help="Output unit cell parameter",
+        const="lat",
+        nargs=1,
+        help="Output unit cell parameter; possible values are [a, b, c, alpha, beta, gamma]",
+        metavar="PARAM",
     )
 
     endpt = parser.add_mutually_exclusive_group()
