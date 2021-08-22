@@ -9,6 +9,8 @@ flake8 = "*"
 black = "==21.7b0"
 darker = "*"
 flake8-bugbear = "*"
+flake8-simplify = "*"
+flake8-comprehensions = "*"
 pylint = "*"
 
 [packages]
