@@ -15,7 +15,7 @@ from typing import (
     Union,
 )
 
-import numpy as np
+from pwproc.geometry.data import GeometryData, RelaxData
 
 
 def parse_file(path, tags):
@@ -52,52 +52,111 @@ def parse_files(paths, tags):
     return data
 
 
-def _format_data_output(tag, fmt, data, data_len):
-    for prefix, record in data.items():
-        dat = record.data[tag]
-        if data_len == 'single':
-            yield "{}: {}".format(prefix, fmt(dat))
-            yield '\n'
-        elif data_len == 'full':
-            yield "{} {}\n".format(prefix, len(dat))
-            for el in dat:
-                yield fmt(el)
-                yield '\n'
-            yield '\n'
+_DataFormatFn = Callable[[GeometryData], str]
+
+
+def _format_data_output(
+    prefix: str,
+    tag: str,
+    data_record: Union[GeometryData, RelaxData],
+    extra_tags: Optional[Mapping[str, Any]],
+) -> Generator[str, None, None]:
+    def _fmt_force(_geom_data: GeometryData) -> str:
+        _precision = 3
+        force, scf_corr = _geom_data.force
+        if abs(scf_corr) > 10 ** -_precision:
+            corr_fstr = "{{:0{:d}.{:d}f}}".format(_precision + 2, _precision)
         else:
-            raise ValueError
-
-
-def write_data(d_file, dtags, data, endpt):
-    # type: (TextIO, Iterable[str], Mapping[str, GeometryData], str) -> None
-    """Write additional data to file."""
-    def _force_fmt(args):
-        p = 3
-        force, scf_corr = args
-        if abs(scf_corr) > 10**-p:
-            corr_fstr = '{{:0{:d}.{:d}f}}'.format(p+2, p)
-        else:
-            corr_fstr = '{{:0{:d}.{:d}e}}'.format(p+5, p-1)
-
+            corr_fstr = "{{:0{:d}.{:d}e}}".format(_precision + 5, _precision - 1)
         corr_fmt = corr_fstr.format(scf_corr)
-        return '{:05.3f}  {}'.format(force, corr_fmt)
+        return "{:05.3f}  {}".format(force, corr_fmt)
 
-    formatters = {'energy': ("Energy (Ry)", lambda en: str(en)),
-                  'force': ('Total force   SCF correction  (Ry/au)', _force_fmt),
-                  'press': ('Total Press.  Max Press.  (kbar)',
-                            lambda p: "{: .2f}  {: .2f}".format(p[0], np.abs(p[2]).max())),
-                  'mag': ('Total mag.  Abs. mag.  (Bohr mag/cell)',
-                           lambda m: '{}  {}'.format(*m))}
+    def _fmt_pressure(_geom_data: GeometryData) -> str:
+        tot_press, press_tensor = _geom_data.press
+        max_press = abs(press_tensor).max()
+        return f"{tot_press: .2f}  {max_press: .2f}"
 
-    data_len = 'full' if endpt is None else 'single'
+    def _fmt_volume(_geom_data: GeometryData) -> str:
+        # pylint: disable=import-outside-toplevel
+        from pwproc.geometry.util import cell_volume
 
-    for tag in dtags:
-        # Look up formatter
-        header, fmt = formatters[tag]
-        # Write header
-        d_file.write(header + '\n')
-        # Dump for each file
-        d_file.writelines(_format_data_output(tag, fmt, data, data_len))
+        volume = cell_volume(_geom_data.basis)
+        return f"{volume:.2f}"
+
+    def _fmt_lat(_geom_data: GeometryData) -> str:
+        # pylint: disable=import-outside-toplevel
+        from pwproc.geometry.util import cell_parameters
+
+        if extra_tags is None or "lat" not in extra_tags:
+            raise RuntimeError("Extra data for 'lat' formatter not present.")
+        fields = sorted(x[1] for x in extra_tags["lat"])
+        cell_params = cell_parameters(_geom_data.basis)
+        formatted_fields = [f"{cell_params[i]:f}" for i in fields]
+        return "  ".join(formatted_fields)
+
+    formatters: Mapping[str, _DataFormatFn] = {
+        "energy": lambda _dat: f"{_dat.energy:.5f}",
+        "force": _fmt_force,
+        "press": _fmt_pressure,
+        "mag": lambda _dat: f"{_dat.mag[0]}  {_dat.mag[1]}",
+        "vol": _fmt_volume,
+        "lat": _fmt_lat,
+    }
+
+    # Select the formatting function
+    _fmt = formatters[tag]
+
+    # Extract and format data from the record
+    if isinstance(data_record, GeometryData):
+        yield "{}: {}".format(prefix, _fmt(data_record))
+        yield "\n"
+    else:
+        yield "{} {}\n".format(prefix, len(data_record))
+        for _step in data_record:
+            yield _fmt(_step)
+            yield "\n"
+        yield "\n"
+
+
+def write_data(
+    relax_data: Mapping[str, Union[GeometryData, RelaxData]],
+    data_file: TextIO,
+    data_tags: Iterable[str],
+    extra_tags: Optional[Mapping[str, Any]] = None,
+):
+    """Write additional data to file."""
+
+    def _lat_header() -> str:
+        _units = {
+            "a": "A",
+            "b": "A",
+            "c": "A",
+            "alpha": "deg",
+            "beta": "deg",
+            "gamma": "deg",
+        }
+        if extra_tags is None or "lat" not in extra_tags:
+            raise ValueError
+        fields = sorted(extra_tags["lat"], key=lambda x: x[1])
+        header_parts = ["{} ({})".format(name, _units[name]) for name, _ in fields]
+        return "  ".join(header_parts)
+
+    headers = {
+        "energy": "Energy (Ry)",
+        "force": "Total force   SCF correction  (Ry/au)",
+        "press": "Total Press.  Max Press.  (kbar)",
+        "mag": "Total mag.  Abs. mag.  (Bohr mag/cell)",
+        "vol": "Unit cell volume (A^3)",
+        "lat": _lat_header(),
+    }
+
+    for tag in data_tags:
+        # Write header for this data type
+        data_file.write(headers[tag] + "\n")
+        # Write data for each file
+        for prefix, record in relax_data.items():
+            data_file.writelines(_format_data_output(prefix, tag, record, extra_tags))
+
 
 def write_xsf(xsf, data):
     # type: (str, Mapping[str, GeometryData]) -> None
@@ -302,10 +361,10 @@ def parse_args_relax(args):
 
 
 def _get_parser_tags(dtags):
-    # type: (Iterable[Union[str, Tuple]]) -> Set[str]
+    # type: (Iterable[str]) -> Set[str]
     _parser_tags = ("energy", "force", "press", "mag", "fermi")
     # Only pass on some data tags to the parser
-    return set(tag for tag in dtags if tag in _parser_tags)
+    return {tag for tag in dtags if tag in _parser_tags}
 
 
 def run_relax(args):
@@ -339,7 +398,9 @@ def run_relax(args):
 
     # Write additional data
     if args.dtags:
-        write_data(args.data, args.dtags, out_data, args.endpoint)
+        # extra_data field is not initialized to None
+        extra_data = getattr(args, "extra_data", None)
+        write_data(out_data, args.data, args.dtags, extra_data)
     args.data.close()
 
 
