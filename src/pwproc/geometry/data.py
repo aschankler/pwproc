@@ -1,12 +1,16 @@
 """Data structures for holding geometry data."""
 
-from typing import Any, Dict, Tuple, Iterable, Iterator, Optional, \
-    Sequence, Sized, Union
+from collections.abc import Sized
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Union
 
 from pwproc.geometry.util import Basis, Species, Tau
 
+# TODO: validate data fields more consistently (consider `ensure` package; descriptor interface
+# Also note that the type inconsistency between GeometryData + RelaxData probably means
+# that they should not be forced to implement the same base interface
 
-class GeometryDataBase:
+
+class GeometryDataBase(Sized):
     """Base class for crystal structure data."""
     _prefix: str = None
     _coord_type: str = None
@@ -17,7 +21,7 @@ class GeometryDataBase:
     _data: Dict[str, Any] = None
 
     def __init__(self, prefix, basis, species, tau, coord_type=None, **data):
-        # type: (str, Union[Basis, Sequence[Basis]], Species, Union[Tau, Sequence[Tau]], Optional[str], Any) -> None
+        # type: (str, Union[Basis, Sequence[Basis]], Species, Union[Tau, Sequence[Tau]], Optional[str], **Any) -> None
         self.prefix = prefix
         self.basis = basis
         self.species = species
@@ -88,6 +92,10 @@ class GeometryDataBase:
         new_obj.convert_coords(new_coords)
         return new_obj
 
+    def __len__(self):
+        # type: () -> int
+        return 0
+
     def __getattr__(self, name):
         # type: (str) -> Any
         if name in self.data:
@@ -112,7 +120,7 @@ class GeometryData(GeometryDataBase):
     """
 
     def __init__(self, prefix, basis, species, tau, coord_type=None, **data):
-        # type: (str, Basis, Species, Tau, Optional[str], Any) -> None
+        # type: (str, Basis, Species, Tau, Optional[str], **Any) -> None
         # Updates type signature for class
         super().__init__(prefix, basis, species, tau, coord_type, **data)
 
@@ -146,11 +154,14 @@ class GeometryData(GeometryDataBase):
 
         return cls(pref, basis, species, tau)
 
-    def convert_coords(self, new_coord):
+    def convert_coords(self, new_coords):
         # type: (str) -> None
         from pwproc.geometry import convert_coords
-        self.tau = convert_coords(1.0, self.basis, self.tau, self.coord_type, new_coord)
-        self._coord_type = new_coord
+
+        self.tau = convert_coords(
+            1.0, self.basis, self.tau, self.coord_type, new_coords
+        )
+        self._coord_type = new_coords
 
     def to_xsf(self):
         # type: () -> Iterator[str]
@@ -165,7 +176,7 @@ class GeometryData(GeometryDataBase):
             object.__setattr__(self, name, value)
 
 
-class RelaxData(GeometryDataBase, Sized):
+class RelaxData(GeometryDataBase, Iterable):
     """Data about a relaxation run.
 
     prefix: str
@@ -203,7 +214,7 @@ class RelaxData(GeometryDataBase, Sized):
                          for b, t in zip(self.basis, self.tau))
         self._coord_type = new_coords
 
-    @GeometryData.basis.setter
+    @GeometryDataBase.basis.setter
     def basis(self, b):
         # type: (Sequence[Basis]) -> None
         assert(b[0].shape == (3, 3))
@@ -211,14 +222,14 @@ class RelaxData(GeometryDataBase, Sized):
             assert(len(b) == self.nsteps)
         self._basis = b
 
-    @GeometryData.species.setter
+    @GeometryDataBase.species.setter
     def species(self, s):
         # type: (Species) -> None
         if self.tau:
             assert(len(s) == self.tau[0].shape)
         self._species = s
 
-    @GeometryData.tau.setter
+    @GeometryDataBase.tau.setter
     def tau(self, t):
         # type: (Sequence[Tau]) -> None
         assert(t[0].shape[1] == 3)
@@ -260,6 +271,10 @@ class RelaxData(GeometryDataBase, Sized):
         slice_data = {k: v[item] for k, v in self.data.items()}
         return GeometryData(self.prefix, self.basis[item], self.species, self.tau[item],
                             coord_type=self.coord_type, **slice_data)
+
+    def __iter__(self):
+        # type: () -> Iterator[GeometryData]
+        return (self[i] for i in range(len(self)))
 
     def get_init(self):
         # type: () -> GeometryData

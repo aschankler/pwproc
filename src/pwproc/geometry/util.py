@@ -25,6 +25,7 @@ def convert_coords(alat, basis, tau, in_type, out_type):
     :param in_type: coordinate type of `tau`
     :param out_type: coordinate type to return
     """
+    # TODO: deal with coord types such as "alat = 3.2"; either here or in callers
     if in_type == out_type:
         return tau
 
