@@ -199,7 +199,10 @@ def parse_args_relax(args):
         "--xsf",
         action="store",
         metavar="FILE",
-        help="Write xsf structures to file. The key `{PREFIX}` in FILE is replaced by the calculation prefix",
+        help=(
+            "Write xsf structures to file. The key `{PREFIX}` in FILE is replaced by"
+            " the calculation prefix"
+        ),
     )
     parser.add_argument(
         "--data",
@@ -304,6 +307,10 @@ def parse_args_relax(args):
             values: Union[str, Sequence[Any], None],
             option_string: Optional[str] = None,
         ) -> None:
+            if values is None or isinstance(values, str):
+                raise TypeError(
+                    f"Incorrect argument type to {self.__class__}. Check nargs?"
+                )
             # Add flag to main group
             items = getattr(namespace, self.dest, None)
             items = [] if items is None else items
@@ -330,7 +337,10 @@ def parse_args_relax(args):
         dest="dtags",
         const="lat",
         nargs=1,
-        help="Output unit cell parameter; possible values are [a, b, c, alpha, beta, gamma]",
+        help=(
+            "Output unit cell parameter; possible values are [a, b, c, alpha, beta,"
+            " gamma]"
+        ),
         metavar="PARAM",
     )
 
@@ -340,7 +350,9 @@ def parse_args_relax(args):
         dest="endpoint",
         action="store_const",
         const="final",
-        help="Save data only for the final structure. Warn if relaxation did not finish",
+        help=(
+            "Save data only for the final structure. Warn if relaxation did not finish"
+        ),
     )
     endpt.add_argument(
         "--last",
