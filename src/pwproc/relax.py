@@ -72,8 +72,8 @@ def _format_data_output(
         return "{:05.3f}  {}".format(force, corr_fmt)
 
     def _fmt_pressure(_geom_data: GeometryData) -> str:
-        tot_press, press_tensor = _geom_data.press
-        max_press = abs(press_tensor).max()
+        tot_press, _, press_tensor_kbar = _geom_data.press
+        max_press = abs(press_tensor_kbar).max()
         return f"{tot_press: .2f}  {max_press: .2f}"
 
     def _fmt_volume(_geom_data: GeometryData) -> str:
@@ -115,7 +115,6 @@ def _format_data_output(
         for _step in data_record:
             yield _fmt(_step)
             yield "\n"
-        yield "\n"
 
 
 def write_data(
@@ -136,7 +135,10 @@ def write_data(
             "gamma": "deg",
         }
         if extra_tags is None or "lat" not in extra_tags:
-            raise ValueError
+            # FixMe: cannot raise error, since this will be called even if the
+            # header is never printed. None should raise error when it is joined
+            # with newline, but this is not a good solution
+            return None
         fields = sorted(extra_tags["lat"], key=lambda x: x[1])
         header_parts = ["{} ({})".format(name, _units[name]) for name, _ in fields]
         return "  ".join(header_parts)
@@ -156,6 +158,7 @@ def write_data(
         # Write data for each file
         for prefix, record in relax_data.items():
             data_file.writelines(_format_data_output(prefix, tag, record, extra_tags))
+        data_file.write("\n")
 
 
 def write_xsf(xsf, data):
@@ -382,7 +385,7 @@ def _get_parser_tags(dtags):
 def run_relax(args):
     """Main function for `relax` subcommand."""
     # Parse the output files
-    parser_tags = _get_parser_tags(args.dtags)
+    parser_tags = None if args.dtags is None else _get_parser_tags(args.dtags)
     relax_data = parse_files(args.in_file, parser_tags)
 
     # Take the desired step
