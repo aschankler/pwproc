@@ -1,5 +1,6 @@
 """Geometry conversion utilities."""
 
+import re
 from typing import NewType, Tuple
 
 import numpy as np
@@ -67,6 +68,51 @@ def from_crystal(alat, basis, tau, out_type):
         return tau @ basis
     else:
         raise ValueError("Coord. type {}".format(out_type))
+
+
+def _basis_to_bohr(basis: Basis, in_type: str) -> Basis:
+    """Scale basis to bohr units."""
+    alat_re = re.compile(r"^alat *= +([.\d]+)$")
+    ang_to_bohr = scipy.constants.angstrom / scipy.constants.value("Bohr radius")
+    if in_type == "angstrom":
+        return ang_to_bohr * basis
+    elif in_type == "bohr":
+        return basis
+    elif alat_re.match(in_type):
+        alat_in = float(alat_re.match(in_type).group(1))
+        return alat_in * basis
+    raise ValueError(f"Bad basis coordinates {in_type}")
+
+
+def cell_alat(basis: Basis, in_type="bohr") -> float:
+    """Calculate alat (defined as the first lattice parameter in bohr)."""
+    basis_bohr = _basis_to_bohr(basis, in_type)
+    return np.linalg.norm(basis_bohr[0])
+
+
+def convert_basis(basis: Basis, in_type: str, out_type: str) -> Basis:
+    """Scale basis to correct units.
+
+    :param basis: Basis in input coordinates
+    :param in_type: Input units. alat should contain value of alat.
+    :param out_type: Desired output coordinates. alat output will redefine alat.
+    :returns: Rescaled basis
+    """
+    bohr_to_ang = scipy.constants.value("Bohr radius") / scipy.constants.angstrom
+
+    # First convert to Bohr
+    basis_bohr = _basis_to_bohr(basis, in_type)
+
+    # Convert to output coordinates
+    if out_type == "angstrom":
+        return bohr_to_ang * basis_bohr
+    elif out_type == "bohr":
+        return basis_bohr
+    elif out_type == "alat":
+        alat_out = cell_alat(basis_bohr)
+        return basis_bohr / alat_out
+    else:
+        raise ValueError(f"Bad basis coordinates {out_type}")
 
 
 def cell_volume(basis):
