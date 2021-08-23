@@ -142,4 +142,3 @@ if __name__ == '__main__':
     import sys
     args = parse_args_rattle(sys.argv[1:])
     run_rattle(args)
-

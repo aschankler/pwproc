@@ -1,5 +1,7 @@
 """`scf` subcommand parses single point energy calculations."""
 
+import sys
+
 
 def get_scf_energy(path):
     # type: (str) -> float
@@ -80,7 +82,5 @@ def run_scf(args):
 
 
 if __name__ == '__main__':
-    import sys
-
     args = parse_args_scf(sys.argv[1:])
     run_scf(args)

@@ -96,7 +96,7 @@ def parse_pwx_out(lines):
             if match:
                 this_kpt = match.group(1)
                 buffering = True
-    
+
     return tuple(map(np.stack, zip(*parsed_buffer)))
 
 
@@ -173,7 +173,7 @@ def parse_args_bands(args):
     # Apply defaults
     args = parser.parse_args(args)
     if args.in_type is None:
-        args.in_type = 'pwx'
+        args.in_type = "bands"
 
     def gen_out_path(out_path, ext):
         if out_path is not None and out_path.is_dir():
@@ -211,4 +211,3 @@ if __name__ == '__main__':
     import sys
     args = parse_args_bands(sys.argv[1:])
     run_bands(args)
-

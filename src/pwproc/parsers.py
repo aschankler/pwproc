@@ -2,12 +2,27 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Sequence, Tuple, \
-    List, Generic, Optional, Pattern, Match, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Mapping,
+    Match,
+    MutableMapping,
+    Optional,
+    Pattern,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
+
 import numpy as np
 
-from pwproc.geometry import Basis, Species, Tau, GeometryData, RelaxData
-from pwproc.util import parse_vector, LookaheadIter
+from pwproc.geometry import Basis, GeometryData, RelaxData, Species, Tau
+from pwproc.util import LookaheadIter, parse_vector
 
 
 class ParserError(RuntimeError): pass
@@ -39,6 +54,7 @@ def get_init_basis(path):
     # type: (Path) -> Tuple[float, Basis]
     """Extracts the initial basis in angstrom from pw.x output."""
     from scipy import constants
+
     from pwproc.util import parser_one_line, parser_with_header
 
     bohr_to_ang = constants.value('Bohr radius') / constants.angstrom
@@ -207,17 +223,27 @@ class GeometryParser(ParserBase[Tuple[str, Species, Tau]]):
 
 
 class BasisParser(ParserBase[Basis]):
-    header_re = re.compile(r"CELL_PARAMETERS \((angstrom)\)")
+    """Capture basis converted to angstrom."""
+
+    header_re = re.compile(
+        r"CELL_PARAMETERS (\()?(?P<coord>angstrom|bohr|alat= [.\d]+)(?(1)\))"
+    )
     basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
 
     def complete_match(self, match, lines):
         # type: (Match, LookaheadIter[str]) -> None
+        coord_type = match.group("coord")
         basis_tmp = []
         while self.basis_row_re.match(lines.top()):
             line = lines.pop()
             basis_tmp.append(parse_vector(line))
-        assert(len(basis_tmp) == 3)
+        assert len(basis_tmp) == 3
         basis = np.array(basis_tmp)
+        if coord_type != "angstrom":
+            # pylint: disable=import-outside-toplevel
+            from pwproc.geometry.util import convert_basis
+
+            basis = convert_basis(basis, coord_type.strip(), "angstrom")
         self.buffer.append(Basis(basis))
 
 
@@ -396,6 +422,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
                      relax_dims: _RelaxDims
                      ) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]:
     from itertools import starmap
+
     from pwproc.geometry import convert_coords
 
     # Unpack geometry
@@ -404,14 +431,18 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
 
     assert(species_i == species)
 
+    # Unpack relax dimensions
+    n_steps, relax_kind, relax_done, zmag_relax = relax_dims
+
+    # Check relative length of basis buffer
+    if relax_kind == "vcrelax":
+        assert len(basis_steps) == len(pos)
+
     # Convert coordinates if needed
     pos_i = convert_coords(alat, basis_i, pos_i, ctype_i, target_coord)
     basis_steps = (basis_i,) * len(pos) if len(basis_steps) == 0 else tuple(basis_steps)
     pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, ctype, target_coord),
                         zip(basis_steps, pos)))
-
-    # Unpack relax dimensions
-    n_steps, relax_kind, relax_done, zmag_relax = relax_dims
 
     # The geometry is unchanged in a magnetization check, just eliminate the last
     if zmag_relax:
@@ -499,6 +530,7 @@ def parse_relax(path, tags=None, coord_type='crystal'):
     _relax_data = _get_relax_data(path, tags, n_steps, _zmag_relax)
     energies, final_e, _relax_kind, geom, data_buffs, _zmag_relax = _relax_data
     _relax_done = final_e is not None
+    # TODO: Turn relax dims into an explicit flags object
     _relax_dims: _RelaxDims = (n_steps, _relax_kind, _relax_done, _zmag_relax)
 
     # Trim data buffers
