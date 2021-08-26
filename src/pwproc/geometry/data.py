@@ -3,7 +3,7 @@
 from collections.abc import Sized
 from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Tuple, Union
 
-from pwproc.geometry.util import Basis, Species, Tau
+from pwproc.geometry.cell import Basis, Species, Tau
 
 # TODO: validate data fields more consistently (consider `ensure` package; descriptor interface
 # Also note that the type inconsistency between GeometryData + RelaxData probably means
@@ -156,11 +156,9 @@ class GeometryData(GeometryDataBase):
 
     def convert_coords(self, new_coords):
         # type: (str) -> None
-        from pwproc.geometry import convert_coords
+        from pwproc.geometry.cell import convert_positions
 
-        self.tau = convert_coords(
-            1.0, self.basis, self.tau, self.coord_type, new_coords
-        )
+        self.tau = convert_positions(self.tau, self.basis, self.coord_type, new_coords)
         self._coord_type = new_coords
 
     def to_xsf(self):
@@ -208,10 +206,12 @@ class RelaxData(GeometryDataBase, Iterable):
 
     def convert_coords(self, new_coords):
         # type: (str) -> None
-        from pwproc.geometry import convert_coords
+        from pwproc.geometry.cell import convert_positions
 
-        self.tau = tuple(convert_coords(1.0, b, t, self.coord_type, new_coords)
-                         for b, t in zip(self.basis, self.tau))
+        self.tau = tuple(
+            convert_positions(t, b, self.coord_type, new_coords)
+            for b, t in zip(self.basis, self.tau)
+        )
         self._coord_type = new_coords
 
     @GeometryDataBase.basis.setter

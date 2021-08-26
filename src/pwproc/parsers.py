@@ -238,13 +238,13 @@ class BasisParser(ParserBase[Basis]):
             line = lines.pop()
             basis_tmp.append(parse_vector(line))
         assert len(basis_tmp) == 3
-        basis = np.array(basis_tmp)
+        basis = Basis(np.array(basis_tmp))
         if coord_type != "angstrom":
             # pylint: disable=import-outside-toplevel
-            from pwproc.geometry.util import convert_basis
+            from pwproc.geometry import convert_basis
 
             basis = convert_basis(basis, coord_type.strip(), "angstrom")
-        self.buffer.append(Basis(basis))
+        self.buffer.append(basis)
 
 
 class ForceParser(ParserBase[Tuple[float, float]]):
@@ -423,7 +423,7 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
                      ) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]:
     from itertools import starmap
 
-    from pwproc.geometry import convert_coords
+    from pwproc.geometry import convert_positions
 
     # Unpack geometry
     ctype_i, alat, basis_i, species_i, pos_i = geom_init
@@ -439,10 +439,16 @@ def _proc_geom_buffs(geom_buff: Tuple[str, Sequence[Basis], Species, Sequence[Ta
         assert len(basis_steps) == len(pos)
 
     # Convert coordinates if needed
-    pos_i = convert_coords(alat, basis_i, pos_i, ctype_i, target_coord)
+    pos_i = convert_positions(pos_i, basis_i, ctype_i, target_coord, alat=alat)
     basis_steps = (basis_i,) * len(pos) if len(basis_steps) == 0 else tuple(basis_steps)
-    pos = tuple(starmap(lambda basis, tau: convert_coords(alat, basis, tau, ctype, target_coord),
-                        zip(basis_steps, pos)))
+    pos = tuple(
+        starmap(
+            lambda basis, tau: convert_positions(
+                tau, basis, ctype, target_coord, alat=alat
+            ),
+            zip(basis_steps, pos),
+        )
+    )
 
     # The geometry is unchanged in a magnetization check, just eliminate the last
     if zmag_relax:

@@ -19,7 +19,7 @@ def read_poscar(lines, out_type='angstrom'):
     # type: (Iterable[str], str) -> Tuple[str, float, Basis, Species, Tau]
     from itertools import chain, repeat
     from pwproc.util import parse_vector
-    from pwproc.geometry import convert_coords
+    from pwproc.geometry.cell import convert_positions
 
     # Read data from input
     lines = content_lines(lines)
@@ -52,7 +52,7 @@ def read_poscar(lines, out_type='angstrom'):
     pos = alat * Tau(np.array(tuple(map(parse_vector, pos))))
 
     # Convert the input coordinates
-    pos = convert_coords(alat, basis, pos, in_type, out_type)
+    pos = convert_positions(pos, basis, in_type, out_type, alat=alat)
 
     return name, alat, basis, species, pos
 
