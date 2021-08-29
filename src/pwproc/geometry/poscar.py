@@ -83,6 +83,8 @@ def gen_poscar(basis, species, pos, name=None, alat=1.0):
     s_kinds = sorted(s_kinds)
 
     # Write atomic species
-    yield columns((s_kinds, tuple(str(s_counts[s]) for s in s_kinds)), 1, lspace=0) + '\n'
-    yield 'Cartesian\n'
-    yield columns(pos, 3, lspace=0, s_func=FORMAT_POS)
+    yield from columns(
+        (s_kinds, tuple(str(s_counts[s]) for s in s_kinds)), min_space=1, left_pad=0
+    )
+    yield "Cartesian\n"
+    yield from columns(pos, min_space=3, left_pad=0, convert_fn=FORMAT_POS)

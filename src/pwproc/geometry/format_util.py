@@ -2,11 +2,11 @@
 
 import re
 from decimal import Decimal
-from typing import Callable, Iterable, Optional, Sequence, TypeVar
+from typing import Callable, List, Optional, Sequence, TypeVar
 
 import numpy as np
 
-T = TypeVar('T')
+_T = TypeVar("_T")
 
 LATTICE_PRECISION = 9
 POSITION_PRECISION = 9
@@ -106,60 +106,67 @@ def FORMAT_POS(pos):
     return as_fixed_float(pos, POSITION_PRECISION)
 
 
-def columns(matrix: Iterable[Iterable[T]],
-            min_space: int, lspace: Optional[int] = None,
-            s_func: Callable[[T], str] = str, sep: str = ' ',
-            align: str = 'front') -> str:
-    """Arrange `matrix` into a string with aligned columns.
+def columns(
+    matrix: Sequence[Sequence[_T]],
+    *,
+    min_space: int = 3,
+    left_pad: Optional[int] = None,
+    convert_fn: Callable[[_T], str] = str,
+    sep: str = " ",
+    align: str = "left",
+) -> List[str]:
+    """Format `matrix` into a string with aligned columns.
 
-    Parameters
-    ----------
-    matrix :
-        May not be ragged
-    min_space : int
-        Minimum number of separators between columns
-    lspace : int, optional
-        Minimum number of leading separators (default `minspace`)
-    s_func : Callable, optional
-        Applied to elements of `matrix` before aligning (default str)
-    sep : str, optional
-        String used as a separator between columns (default ' ')
-    align : str, optional
-        Either 'front' or 'back'. Where to align elements if all elements
-        in a column are not the same width. (default 'front')
+    Args:
+        matrix: 2d array of values to print; may not be ragged
+        min_space: Minimum number of separators between columns
+        left_pad: Minimum number of leading separators (default `min_space`)
+        convert_fn: Conversion function applied to each element of `matrix` before
+            aligning (default :py:func:`str`)
+        sep: String used as a separator between columns (default space)
+        align: Direction to align elements if elements in a column are not the same
+            width. Either 'left' or 'right' (default 'left')
+
+    Returns:
+        Formatted matrix as a list of formatted lines
     """
-    if align != 'front' and align != 'back':
-        raise ValueError("Incorrect pad specification")
-    if lspace is None:
-        lspace = min_space
+    if align not in ("left", "right"):
+        raise ValueError(f"Incorrect alignment {align!r}")
+    if any(len(line) != len(matrix[0]) for line in matrix):
+        raise ValueError("Matrix may not be ragged")
+    if left_pad is None:
+        left_pad = min_space
 
-    matrix = [list(map(s_func, line)) for line in matrix]
-    widths = [max(map(len, col)) for col in zip(*matrix)]
+    field_strings = [list(map(convert_fn, line)) for line in matrix]
+    col_widths = [max(map(len, col)) for col in zip(*matrix)]
 
-    acc = []
-    for row in matrix:
+    complete_lines = []
+    for row in field_strings:
         line = []
-        for width, item in zip(widths, row):
-            extra = width - len(item)
-            if align == 'back':
-                line.append(extra*sep + item)
+        for width, field in zip(col_widths, row):
+            if align == "left":
+                line.append(field.ljust(width, sep))
             else:
-                line.append(item + extra*sep)
-        acc.append(lspace * sep + (min_space * sep).join(line).rstrip())
-    return "\n".join(acc)
+                line.append(field.rjust(width, sep))
+        complete_lines.append(
+            left_pad * sep + (min_space * sep).join(line).rstrip() + "\n"
+        )
+    return complete_lines
 
 
 def format_basis(basis, lspace=None):
     # type: (np.ndarray, int) -> str
     """Format a basis (3x3 array)."""
     formatter = FORMAT_LAT
-    return columns(basis, min_space=3, s_func=formatter, lspace=lspace)
+    return "".join(columns(basis, left_pad=lspace, convert_fn=formatter))
 
 
 def format_tau(species, tau):
     # type: (Sequence[str], np.ndarray) -> str
     """Format a list of atomic positions preceded by their species."""
-    from itertools import chain, starmap
-    formatter = lambda s: FORMAT_POS(s) if isinstance(s, float) else str(s)
-    mat = starmap(chain, zip(map(lambda x: [x], species), tau))
-    return columns(mat, min_space=3, lspace=0, s_func=formatter)
+
+    def _row_formatter(s):
+        return FORMAT_POS(s) if isinstance(s, float) else str(s)
+
+    mat = [[name] + list(pos) for name, pos in zip(species, tau)]
+    return "".join(columns(mat, min_space=3, left_pad=0, convert_fn=_row_formatter))
