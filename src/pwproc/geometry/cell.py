@@ -1,10 +1,17 @@
 """Property calculators and conversion utilities for unit cells."""
 
 import re
-from typing import NewType, Optional, Tuple
+from typing import List, NewType, Optional, Tuple, Union
 
 import numpy as np
 import scipy.constants  # type: ignore[import]
+
+from pwproc.geometry.format_util import (
+    LATTICE_PRECISION,
+    POSITION_PRECISION,
+    as_fixed_precision,
+    columns,
+)
 
 # Vector of atomic species
 Species = NewType("Species", Tuple[str, ...])
@@ -242,3 +249,62 @@ def normalize_alat(
     new_alat = cell_alat(basis_bohr, units="bohr")
     new_basis = convert_basis(basis_bohr, "bohr", "alat", alat=new_alat)
     return new_alat, new_basis
+
+
+def format_basis(
+    basis: Basis,
+    *,
+    min_space: int = 3,
+    left_pad: Optional[int] = None,
+    precision: int = LATTICE_PRECISION,
+) -> str:
+    """Format a basis as an aligned array.
+
+    Args:
+        basis: 3x3 array to format as a basis
+        min_space: Number of spaces between columns
+        left_pad: Initial space before first column of basis
+        precision: Precision to format lattice vectors
+
+    Returns:
+        Formatted basis as a single string
+    """
+
+    def _field_fmt(value: float) -> str:
+        return as_fixed_precision(value, precision)
+
+    return "".join(
+        columns(basis, min_space=min_space, left_pad=left_pad, convert_fn=_field_fmt)
+    )
+
+
+def format_positions(
+    species: Species,
+    tau: Tau,
+    *,
+    min_space: int = 3,
+    left_pad: int = 0,
+    precision: int = POSITION_PRECISION,
+) -> List[str]:
+    """Format a list of atomic positions preceded by their species.
+
+    Args:
+        species
+        tau
+        min_space: Number of spaces between columns
+        left_pad: Initial space before first column
+        precision: Precision to format atomic positions
+
+    Returns:
+        List of lines with one formatted atomic position per line
+    """
+
+    def _field_fmt(value: Union[str, float]) -> str:
+        if isinstance(value, float):
+            return as_fixed_precision(value, precision)
+        return str(value)
+
+    position_fields = [[name] + list(pos) for name, pos in zip(species, tau)]
+    return columns(
+        position_fields, min_space=min_space, left_pad=left_pad, convert_fn=_field_fmt
+    )

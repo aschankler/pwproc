@@ -4,8 +4,6 @@ import re
 from decimal import Decimal
 from typing import Callable, List, Optional, Sequence, TypeVar
 
-import numpy as np
-
 _T = TypeVar("_T")
 
 LATTICE_PRECISION = 9
@@ -36,7 +34,7 @@ def _float_decimal_man(number: float) -> Decimal:
     return Decimal(number).scaleb(-_float_decimal_exp(number)).normalize()
 
 
-def as_fixed_float(value: float, precision: int):
+def as_fixed_precision(value: float, precision: int):
     """Format ``value`` as a float with ``precision`` digits after the decimal."""
     return f"{value:.{precision}f}"
 
@@ -94,18 +92,6 @@ def from_fortran_exp(str_value: str) -> float:
     return mantissa * 10 ** exp
 
 
-def FORMAT_LAT(lat):
-    # type: (float) -> str
-    """Format component of lattice vector."""
-    return as_fixed_float(lat, LATTICE_PRECISION)
-
-
-def FORMAT_POS(pos):
-    # type: (float) -> str
-    """Format component of atom position."""
-    return as_fixed_float(pos, POSITION_PRECISION)
-
-
 def columns(
     matrix: Sequence[Sequence[_T]],
     *,
@@ -138,7 +124,7 @@ def columns(
         left_pad = min_space
 
     field_strings = [list(map(convert_fn, line)) for line in matrix]
-    col_widths = [max(map(len, col)) for col in zip(*matrix)]
+    col_widths = [max(map(len, col)) for col in zip(*field_strings)]
 
     complete_lines = []
     for row in field_strings:
@@ -152,21 +138,3 @@ def columns(
             left_pad * sep + (min_space * sep).join(line).rstrip() + "\n"
         )
     return complete_lines
-
-
-def format_basis(basis, lspace=None):
-    # type: (np.ndarray, int) -> str
-    """Format a basis (3x3 array)."""
-    formatter = FORMAT_LAT
-    return "".join(columns(basis, left_pad=lspace, convert_fn=formatter))
-
-
-def format_tau(species, tau):
-    # type: (Sequence[str], np.ndarray) -> str
-    """Format a list of atomic positions preceded by their species."""
-
-    def _row_formatter(s):
-        return FORMAT_POS(s) if isinstance(s, float) else str(s)
-
-    mat = [[name] + list(pos) for name, pos in zip(species, tau)]
-    return "".join(columns(mat, min_space=3, left_pad=0, convert_fn=_row_formatter))

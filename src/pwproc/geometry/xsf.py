@@ -164,7 +164,8 @@ def read_xsf(lines):
 
 def gen_xsf(basis, species, tau, write_header=True, step=None):
     # type: (Basis, Species, Tau, bool, Optional[int]) -> Iterator[str]
-    from pwproc.geometry.format_util import format_basis, format_tau
+    # pylint: disable=import-outside-toplevel
+    from pwproc.geometry.cell import format_basis, format_positions
 
     nat = len(species)
 
@@ -177,7 +178,8 @@ def gen_xsf(basis, species, tau, write_header=True, step=None):
     yield format_basis(basis) + '\n'
     yield 'PRIMCOORD{}\n'.format(step)
     yield "{} 1\n".format(nat)
-    yield format_tau(species, tau) + '\n'
+    yield from format_positions(species, tau)
+    yield "\n"
 
 
 def gen_xsf_animate(basis, species, tau):

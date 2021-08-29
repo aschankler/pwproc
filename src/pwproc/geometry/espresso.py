@@ -230,7 +230,8 @@ def parse_pwi_atoms(atom_card):
 
 def gen_pwi_cell(basis):
     # type: (Basis) -> Iterator[str]
-    from pwproc.geometry.format_util import format_basis
+    # pylint: disable=import-outside-toplevel
+    from pwproc.geometry.cell import format_basis
     yield "CELL_PARAMETERS {}\n".format("angstrom")
     yield format_basis(basis)
     yield "\n\n"
@@ -239,10 +240,12 @@ def gen_pwi_cell(basis):
 def gen_pwi_atoms(species, pos, coord_type, if_pos=None):
     # type: (Species, Tau, str, Optional[IfPos]) -> Iterator[str]
     from itertools import starmap
-    from pwproc.geometry.format_util import format_tau
+
+    # pylint: disable=import-outside-toplevel
+    from pwproc.geometry.cell import format_positions
     yield "ATOMIC_POSITIONS {}\n".format(coord_type)
     if if_pos is None:
-        yield format_tau(species, pos)
+        yield from format_positions(species, pos)
     else:
         # Optionally add the position freeze
         assert(len(if_pos) == len(species))
@@ -254,8 +257,10 @@ def gen_pwi_atoms(species, pos, coord_type, if_pos=None):
             else:
                 return ""
 
-        pos_lines = format_tau(species, pos).split('\n')
-        yield from starmap(lambda p, ifp: p + if_string(ifp) + '\n', zip(pos_lines, if_pos))
+        pos_lines = format_positions(species, pos)
+        yield from starmap(
+            lambda p, ifp: p.rstrip() + if_string(ifp) + "\n", zip(pos_lines, if_pos)
+        )
 
 
 def gen_pwi(basis: Basis, species: Species, pos: Tau, coord_type: str,

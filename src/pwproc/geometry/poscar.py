@@ -59,7 +59,13 @@ def read_poscar(lines, out_type='angstrom'):
 
 def gen_poscar(basis, species, pos, name=None, alat=1.0):
     # type: (Basis, Species, Tau, Optional[str], float) -> Iterator[str]
-    from pwproc.geometry.format_util import format_basis, columns, FORMAT_POS
+    # pylint: disable=import-outside-toplevel
+    from pwproc.geometry.cell import format_basis
+    from pwproc.geometry.format_util import (
+        POSITION_PRECISION,
+        as_fixed_precision,
+        columns,
+    )
 
     # Write the basis information
     name = "POSCAR" if name is None else name
@@ -87,4 +93,9 @@ def gen_poscar(basis, species, pos, name=None, alat=1.0):
         (s_kinds, tuple(str(s_counts[s]) for s in s_kinds)), min_space=1, left_pad=0
     )
     yield "Cartesian\n"
-    yield from columns(pos, min_space=3, left_pad=0, convert_fn=FORMAT_POS)
+    yield from columns(
+        pos,
+        min_space=3,
+        left_pad=0,
+        convert_fn=lambda x: as_fixed_precision(x, POSITION_PRECISION),
+    )
