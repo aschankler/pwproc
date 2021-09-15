@@ -19,3 +19,6 @@ disable = [
     "no-else-return",
     "missing-docstring",
 ]
+
+[tool.pylint.logging]
+logging-format-style = "new"

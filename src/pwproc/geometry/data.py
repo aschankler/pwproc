@@ -149,10 +149,12 @@ class GeometryData(GeometryDataBase):
     def from_poscar(cls, lines):
         # type: (Iterable[str]) -> GeometryData
         """Initialize structure from poscar file"""
-        from pwproc.geometry import read_poscar
-        pref, _, basis, species, tau = read_poscar(lines)
+        from pwproc.geometry.poscar import read_poscar, read_poscar_comment
 
-        return cls(pref, basis, species, tau)
+        prefix = read_poscar_comment(lines)
+        basis, species, tau = read_poscar(lines)
+
+        return cls(prefix, basis, species, tau)
 
     def convert_coords(self, new_coords):
         # type: (str) -> None
