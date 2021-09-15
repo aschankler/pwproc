@@ -233,7 +233,7 @@ def gen_pwi_cell(basis):
     # pylint: disable=import-outside-toplevel
     from pwproc.geometry.cell import format_basis
     yield "CELL_PARAMETERS {}\n".format("angstrom")
-    yield format_basis(basis)
+    yield from format_basis(basis)
     yield "\n\n"
 
 

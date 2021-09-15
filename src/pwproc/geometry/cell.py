@@ -257,7 +257,7 @@ def format_basis(
     min_space: int = 3,
     left_pad: Optional[int] = None,
     precision: int = LATTICE_PRECISION,
-) -> str:
+) -> List[str]:
     """Format a basis as an aligned array.
 
     Args:
@@ -273,9 +273,7 @@ def format_basis(
     def _field_fmt(value: float) -> str:
         return as_fixed_precision(value, precision)
 
-    return "".join(
-        columns(basis, min_space=min_space, left_pad=left_pad, convert_fn=_field_fmt)
-    )
+    return columns(basis, min_space=min_space, left_pad=left_pad, convert_fn=_field_fmt)
 
 
 def format_positions(

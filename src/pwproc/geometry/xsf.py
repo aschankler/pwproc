@@ -175,8 +175,9 @@ def gen_xsf(basis, species, tau, write_header=True, step=None):
     step = ' {}'.format(step) if step is not None else ''
 
     yield 'PRIMVEC{}\n'.format(step)
-    yield format_basis(basis) + '\n'
-    yield 'PRIMCOORD{}\n'.format(step)
+    yield from format_basis(basis)
+    yield "\n"
+    yield "PRIMCOORD{}\n".format(step)
     yield "{} 1\n".format(nat)
     yield from format_positions(species, tau)
     yield "\n"
