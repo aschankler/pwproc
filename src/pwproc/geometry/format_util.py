@@ -34,9 +34,98 @@ def _float_decimal_man(number: float) -> Decimal:
     return Decimal(number).scaleb(-_float_decimal_exp(number)).normalize()
 
 
-def as_fixed_precision(value: float, precision: int):
+def as_fixed_precision(value: float, precision: int) -> str:
     """Format ``value`` as a float with ``precision`` digits after the decimal."""
-    return f"{value:.{precision}f}"
+    if precision < 0:
+        raise ValueError("Negative precision")
+    return f"{value:#.{precision}f}"
+
+
+def as_fixed_width(
+    value: float, width: int, precision: Optional[int] = None, signed: bool = False
+) -> str:
+    """Format float to fill exactly `width` characters.
+
+    Examples:
+        >>> as_fixed_width(1.0, 5)
+        "1.000"
+        >>> as_fixed_width(1.0, 5, precision=2)
+        "01.00"
+        >>> as_fixed_width(12020.2, 5)
+        "1.2e4"
+        >>> as_fixed_width(0.356, 5)
+        "0.356"
+        >>> as_fixed_width(0.00356, 5)
+        "4.e-3"
+        >>> as_fixed_width(0.356, 5, signed=True)
+        " 0.36"
+
+    Args:
+        value: Number to format
+        width: Exact length of the formatted string
+        precision: Minimum number of digits after the decimal point. The formatted value
+            will always have at least `precision + 1` significant digits.
+
+    Returns:
+        Formatted value with width `width`
+
+    Raises:
+        ValueError: If the value cannot be accurately represented in fewer than
+            `width` characters
+    """
+    if precision is not None and precision < 0:
+        raise ValueError("Negative precision")
+    if width < 1:
+        raise ValueError("Width too small")
+    mantissa = float(_float_decimal_man(value))
+    exponent = _float_decimal_exp(value)
+
+    # Width for the trailing 'eNN' string
+    exp_suffix_width = 2 + _float_decimal_exp(exponent)
+    if exponent < 0:
+        exp_suffix_width += 1
+
+    # Minimum width for a float number to give the correct "scale"
+    # E.g. 12 -> 2, 1 -> 1, 0.001 -> 5
+    if exponent >= 0:
+        min_float_width = 1 + exponent
+    else:
+        min_float_width = 2 + abs(exponent)
+
+    def _format_float(_value: float, _width: int, _units_width: int) -> str:
+        sign_char = " " if signed else "-"
+        if signed or _value < 0:
+            _units_width += 1
+        if _width == _units_width:
+            # No space for decimals
+            if precision is not None and precision != 0:
+                raise ValueError("Width too small for desired precision")
+            return f"{_value:{sign_char}.0f}"
+        max_precision = _width - _units_width - 1
+        tgt_precision = precision if precision is not None else max_precision
+        if max_precision < tgt_precision:
+            raise ValueError("Width too small for desired precision")
+        return f"{_value:{sign_char}#0{_width}.{tgt_precision}f}"
+
+    # Choose between float or exp form by whichever allows more significant digits
+    if 1 + exp_suffix_width < min_float_width:
+        # Use exp form
+        if exp_suffix_width + 1 > width:
+            # Width too small for exponential form
+            if exponent < 0:
+                # Print as rounded zero
+                return _format_float(0.0, width, 1)
+            raise ValueError("Width to small to accurately represent value")
+        fmt_man = _format_float(mantissa, width - exp_suffix_width, 1)
+        return f"{fmt_man:s}e{exponent:d}"
+    else:
+        # Format as float
+        if exponent < 0:
+            # Value is < 1; therefore it can always be formatted (by rounding to 0/1)
+            return _format_float(value, width, 1)
+        if width < min_float_width:
+            raise ValueError("Width too small to accurately represent value")
+        return _format_float(value, width, min_float_width)
 
 
 def as_fortran_exp(value: float, precision: int = 5) -> str:
@@ -57,9 +146,11 @@ def as_fortran_exp(value: float, precision: int = 5) -> str:
     Returns:
         Number formatted as a fortran double
     """
-    mantissa = _float_decimal_man(value)
+    if precision < 0:
+        raise ValueError("Negative precision")
+    mantissa = float(_float_decimal_man(value))
     exp = _float_decimal_exp(value)
-    return f"{mantissa:.{precision}f}d{exp}"
+    return f"{mantissa:#.{precision}f}d{exp}"
 
 
 def from_fortran_exp(str_value: str) -> float:
