@@ -6,11 +6,11 @@ This module writes to the ``pwproc.geometry.poscar`` logger
 
 import logging
 from collections import Counter
-from typing import Iterable, Iterator, Mapping, NamedTuple, Optional, Tuple
+from typing import Iterable, Iterator, List, Mapping, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from pwproc.geometry.cell import Basis, Species, Tau
+from pwproc.geometry.cell import Basis, MovableFlags, Species, Tau
 
 
 class _PoscarHeader(NamedTuple):
@@ -149,7 +149,10 @@ def read_poscar(
     # Parse atomic positions
     n_atoms = sum(header.species.values())
     pos_lines = []
-    for line in lines:
+    for i, line in enumerate(lines):
+        if i > n_atoms:
+            # Stop here if the file has a forces section
+            break
         line_fields = line.split()
         if len(line_fields) != 3 and len(line_fields) != 6:
             raise ValueError(f"Incorrect position format {line!r}")
@@ -169,9 +172,56 @@ def read_poscar(
     return header.basis, species, positions
 
 
-def read_poscar_selective_dynamics():
-    # TODO: implement
-    ...
+def read_poscar_selective_dynamics(poscar_lines: Iterable[str]) -> MovableFlags:
+    """Read the selective dynamics flags."""
+    # Read and store the entire iterable
+    poscar_lines = list(poscar_lines)
+    header = _read_poscar_header(poscar_lines)
+    n_atoms = sum(header.species.values())
+
+    if not header.selective_dynamics:
+        return MovableFlags(tuple(None for _ in range(n_atoms)))
+
+    # Discard up to the atomic positions
+    lines = _content_lines(poscar_lines)
+    for _ in range(9):
+        next(lines)
+
+    def parse_sd_flag(flag: str) -> bool:
+        if flag == "T":
+            return True
+        elif flag == "F":
+            return False
+        else:
+            raise ValueError(f"Bad selective dynamics flag {flag!r}")
+
+    sd_flags: List[Union[None, Tuple[bool, bool, bool]]] = []
+
+    # Read position lines and extract selective dynamics flags
+    for i, line in enumerate(lines):
+        if i > n_atoms:
+            # Stop here if the file has a forces section
+            break
+        line_fields = line.split()
+        if len(line_fields) != 3 and len(line_fields) != 6:
+            raise ValueError(f"Incorrect position format {line!r}")
+        if len(line_fields) == 3:
+            # No SD flags on this line
+            sd_flags.append(None)
+        else:
+            sd_flags.append(
+                (
+                    parse_sd_flag(line_fields[3]),
+                    parse_sd_flag(line_fields[4]),
+                    parse_sd_flag(line_fields[5]),
+                )
+            )
+
+    if len(sd_flags) != n_atoms:
+        print(sd_flags)
+        raise ValueError("Incorrect number of position lines")
+
+    return MovableFlags(tuple(sd_flags))
 
 
 def gen_poscar(
@@ -183,10 +233,24 @@ def gen_poscar(
     scale: float = 1.0,
     in_type: str = "angstrom",
     coordinate_type: str = "cartesian",
-    # TODO: write selective dynamics
-    # pylint disable-next=unused-argument
-    selective_dynamics=None,
+    selective_dynamics: MovableFlags = None,
 ) -> Iterator[str]:
+    """Format the crystal structure in the POSCAR format.
+
+    Args:
+        basis: Lattice vectors in Angstrom
+        species: Vector of atomic species, in the same order as `positions`
+        positions: Vector of atomic positions
+        comment: Single line comment written as the first line in the output
+        scale: Uniform scaling factor applied to basis and positions
+        in_type: Coordinate type used to supply the atomic positions
+        coordinate_type: Coordinates used to write positions in output. One of
+            "cartesian" or "direct"
+        selective_dynamics: Mark atoms as fixed during relaxation
+
+    Yields:
+        Lines of the formatted POSCAR file
+    """
     # pylint: disable=import-outside-toplevel
     from pwproc.geometry.cell import convert_positions, format_basis
     from pwproc.geometry.format_util import (
@@ -195,8 +259,15 @@ def gen_poscar(
         columns,
     )
 
+    if len(species) != len(positions):
+        raise ValueError("Lengths for species and positions do not match")
+    if selective_dynamics is not None and len(species) != len(selective_dynamics):
+        raise ValueError("Incorrect length for selective dynamics flags")
+    comment = "POSCAR" if comment is None else comment.strip()
+    if "\n" in comment:
+        raise ValueError("Comment may not be multiline")
+
     # Write the header information
-    comment = "POSCAR" if comment is None else comment
     yield comment + "\n"
     yield "{}\n".format(scale)
     yield from format_basis(basis / scale)
@@ -213,6 +284,10 @@ def gen_poscar(
         (species_counts, species_counts.values()), min_space=1, left_pad=0
     )
 
+    # Write selective dynamics flag
+    if selective_dynamics is not None:
+        yield "Selective dynamics\n"
+
     # Write atomic positions
     if coordinate_type == "cartesian":
         yield "Cartesian\n"
@@ -228,9 +303,19 @@ def gen_poscar(
     else:
         raise ValueError(f"Bad coordinate type {coordinate_type}")
 
-    yield from columns(
+    pos_lines = columns(
         positions,
         min_space=3,
         left_pad=0,
         convert_fn=lambda x: as_fixed_precision(x, POSITION_PRECISION),
     )
+
+    if selective_dynamics is None:
+        yield from pos_lines
+    else:
+        for pos, sd_flags in zip(pos_lines, selective_dynamics):
+            if sd_flags is None:
+                yield pos[:-1] + "\n"
+            else:
+                fmt_sd = " ".join("T" if x else "F" for x in sd_flags)
+                yield pos[:-1] + " " + fmt_sd + "\n"

@@ -1,7 +1,7 @@
 """Property calculators and conversion utilities for unit cells."""
 
 import re
-from typing import List, NewType, Optional, Tuple, Union
+from typing import List, NewType, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import scipy.constants  # type: ignore[import]
@@ -19,6 +19,10 @@ Species = NewType("Species", Tuple[str, ...])
 Basis = NewType("Basis", np.ndarray)
 # Position matrix [n_atoms x 3]
 Tau = NewType("Tau", np.ndarray)
+# Represent whether atoms may be moved during relaxation/dynamics
+MovableFlags = NewType(
+    "MovableFlags", Optional[Sequence[Union[None, Tuple[bool, bool, bool]]]]
+)
 # Unit cell dimensions (a, b, c) in angstrom and angles (alpha, beta, gamma)
 CellParam = NewType("CellParam", Tuple[float, float, float, float, float, float])
 

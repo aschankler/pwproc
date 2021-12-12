@@ -7,5 +7,5 @@ Cubic BN
    1 1
 Selective dynamics
 Direct
- 0.00 0.00 0.00 T T F
- 0.25 0.25 0.25 F F F
+ 0.00 0.00 0.00 T F T
+ 0.25 0.25 0.25

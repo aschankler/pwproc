@@ -15,7 +15,9 @@ import numpy as np
 import pytest
 
 import pwproc.geometry
-from pwproc.geometry.cell import Basis, Species, Tau
+from pwproc.geometry.cell import Basis, Species, Tau, MovableFlags
+
+# pylint: disable=import-outside-toplevel
 
 
 @contextmanager
@@ -364,19 +366,51 @@ class TestPoscar:
         geom_test = pwproc.geometry.poscar.read_poscar(out_lines, out_type="crystal")
         check_geometry(geom_test, geometry_ref)
 
-    def test_read_dynamics(self):
-        ...
+    @pytest.mark.parametrize(
+        "file,dynamics",
+        [
+            pytest.param("BN_cart", (None, None), id="BN_cart"),
+            pytest.param("BN_crys", (None, None), id="BN_crys"),
+            pytest.param(
+                "BN_cart_sd",
+                ((True, True, False), (False, False, False)),
+                id="BN_cart_sd",
+            ),
+            pytest.param("BN_crys_sd", ((True, False, True), None), id="BN_crys_sd"),
+        ],
+        indirect=["file"],
+    )
+    def test_read_dynamics(self, file: Iterable[str], dynamics: MovableFlags) -> None:
+        result = pwproc.geometry.poscar.read_poscar_selective_dynamics(file)
+        assert len(result) == len(dynamics)
+        for test, ref in zip(result, dynamics):
+            assert test == ref
 
-    def test_write_dynamics(self):
-        ...
+    @pytest.mark.parametrize(
+        "geometry_ref,dynamics",
+        [
+            pytest.param("BN_crystal", None, marks=pytest.mark.xfail),
+            ("BN_crystal", (None, None)),
+            ("BN_crystal", (None, (True, True, True))),
+            ("BN_crystal", (None, (False, True, True))),
+            ("BN_crystal", ((False, False, False), (True, True, True))),
+        ],
+        indirect=["geometry_ref"],
+    )
+    def test_write_dynamics(
+        self, geometry_ref: Geometry, dynamics: MovableFlags
+    ) -> None:
+        out_lines = pwproc.geometry.poscar.gen_poscar(
+            *geometry_ref, selective_dynamics=dynamics
+        )
+        out_lines = "".join(out_lines).split("\n")
+        dynamics_out = pwproc.geometry.poscar.read_poscar_selective_dynamics(out_lines)
+        assert len(dynamics) == len(dynamics_out)
+        for test, ref in zip(dynamics_out, dynamics):
+            assert test == ref
 
 
-# writer (direct)
-# writer (cart)
-# writer (scale)
-# reader (selective_dynamics)
-# writer (selective_dynamics)
-# writer/reader (something with more atoms)
+# writer/reader (something with more atoms) BTO (tetrahedral), LiNbO3,
 # Error tests
 
 
