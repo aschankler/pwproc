@@ -53,10 +53,6 @@ repos:
         args:
         - '--revision'
         - 'HEAD'
-        - '--lint'
-        - 'flake8'
-        - '--lint'
-        - 'pylint'
 -   repo: https://github.com/asottile/setup-cfg-fmt
     rev: v1.17.0
     hooks:
