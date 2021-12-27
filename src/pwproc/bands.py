@@ -129,29 +129,30 @@ def save_bands(kpath, kpts, bands, csv_path=None, npz_path=None):
 def parse_args_bands(args):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(prog='pwproc bands',
-                            description="Parse output from bands.x and pw.x")
-
-    parser.add_argument('in_file', action='store', type=Path, help="pw.x or bands.x output file")
+    parser.add_argument(
+        "in_file", action="store", type=Path, help="pw.x or bands.x output file"
+    )
     in_grp = parser.add_mutually_exclusive_group()
     in_grp.add_argument(
         "--bands",
         action="store_const",
         const="bands",
         dest="in_type",
-        help="Output is from bands.x",
+        help="Parse output from bands.x (default)",
     )
     in_grp.add_argument(
         "--pwx",
         action="store_const",
         const="pwx",
         dest="in_type",
-        help="Output is from pw.x (default)",
+        help="Parse output is from pw.x",
     )
     out_grp = parser.add_argument_group(
         title="Output",
-        description="Output files record kpoint coordinates, band"
-        " energies, and progress on a continuous path coordinate",
+        description=(
+            "Output files record k-point coordinates, band energies, and progress on a"
+            " continuous path coordinate"
+        ),
     )
     out_grp.add_argument(
         "--npz",
