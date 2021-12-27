@@ -124,8 +124,7 @@ def read_poscar(
         next(lines)
 
     # Format the species labels
-    species = tuple(Counter(header.species).elements())
-    species = Species(species)
+    species = Species(tuple(Counter(header.species).elements()))
 
     # Read atomic position type
     coord_line = next(lines).strip().lower()
@@ -180,7 +179,7 @@ def read_poscar_selective_dynamics(poscar_lines: Iterable[str]) -> MovableFlags:
     n_atoms = sum(header.species.values())
 
     if not header.selective_dynamics:
-        return MovableFlags(tuple(None for _ in range(n_atoms)))
+        return tuple(None for _ in range(n_atoms))
 
     # Discard up to the atomic positions
     lines = _content_lines(poscar_lines)
@@ -221,7 +220,7 @@ def read_poscar_selective_dynamics(poscar_lines: Iterable[str]) -> MovableFlags:
         print(sd_flags)
         raise ValueError("Incorrect number of position lines")
 
-    return MovableFlags(tuple(sd_flags))
+    return tuple(sd_flags)
 
 
 def gen_poscar(

@@ -14,15 +14,13 @@ from pwproc.geometry.format_util import (
 )
 
 # Vector of atomic species
-Species = NewType("Species", Tuple[str, ...])
+Species = NewType("Species", Sequence[str])
 # Crystal basis [3x3]
 Basis = NewType("Basis", np.ndarray)
 # Position matrix [n_atoms x 3]
 Tau = NewType("Tau", np.ndarray)
 # Represent whether atoms may be moved during relaxation/dynamics
-MovableFlags = NewType(
-    "MovableFlags", Optional[Sequence[Union[None, Tuple[bool, bool, bool]]]]
-)
+MovableFlags = Optional[Sequence[Union[None, Tuple[bool, bool, bool]]]]
 # Unit cell dimensions (a, b, c) in angstrom and angles (alpha, beta, gamma)
 CellParam = NewType("CellParam", Tuple[float, float, float, float, float, float])
 
