@@ -38,7 +38,7 @@ def convert_positions(
     *,
     basis_units: str = "angstrom",
     alat: Optional[float] = None,
-):
+) -> Tau:
     """Convert the coordinate type of atomic positions.
 
     :param positions: Vector of positions shape (n_atoms, 3)
@@ -63,7 +63,9 @@ def convert_positions(
     return positions
 
 
-def to_crystal(positions: Tau, basis: Basis, in_type: str, alat: Optional[float]):
+def to_crystal(
+    positions: Tau, basis: Basis, in_type: str, alat: Optional[float]
+) -> Tau:
     """Convert from arbitrary coordinates to crystal."""
     bohr_to_ang = scipy.constants.value("Bohr radius") / scipy.constants.angstrom
 
@@ -81,7 +83,9 @@ def to_crystal(positions: Tau, basis: Basis, in_type: str, alat: Optional[float]
         raise ValueError(f"Invalid position coordinate type {in_type}")
 
 
-def from_crystal(positions: Tau, basis: Basis, out_type: str, alat: Optional[float]):
+def from_crystal(
+    positions: Tau, basis: Basis, out_type: str, alat: Optional[float]
+) -> Tau:
     """Convert from crystal coordinates to arbitrary coordinate units."""
     ang_to_bohr = scipy.constants.angstrom / scipy.constants.value("Bohr radius")
 
@@ -141,7 +145,7 @@ def _read_alat_unit(in_type: str, alat: Optional[float] = None) -> float:
     return float(match.group(1))
 
 
-def _basis_to_bohr(basis: Basis, in_type: str, alat: Optional[float]):
+def _basis_to_bohr(basis: Basis, in_type: str, alat: Optional[float]) -> Basis:
     ang_to_bohr = scipy.constants.angstrom / scipy.constants.value("Bohr radius")
     if in_type == "angstrom":
         return ang_to_bohr * basis
@@ -244,8 +248,18 @@ def normalize_alat(
 ) -> Tuple[float, Basis]:
     """Rescale the basis units so that alat is the length of the first lattice vector.
 
-    This is useful if the unit cell has change (eg. in a vc-relax), but the units of
+    This is useful if the unit cell has changed (eg. in a vc-relax), but the units of
     alat have not.
+
+    Args:
+        basis: Lattice vectors in `units`
+        units: Units of `basis`
+        alat: Lattice constant used to scale `basis` units
+
+    Returns:
+        new_alat: alat used to scale the basis
+        new_basis: Basis rescaled using `new_alat`. The first lattice vector will have
+            length one in these new units.
     """
     basis_bohr = convert_basis(basis, units, "bohr", alat=alat)
     new_alat = cell_alat(basis_bohr, units="bohr")
