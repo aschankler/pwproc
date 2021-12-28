@@ -139,10 +139,11 @@ def _read_alat_unit(in_type: str, alat: Optional[float] = None) -> float:
         if alat is None:
             raise ValueError("Must specify value for alat")
         return alat
-    match = alat_re.match(in_type)
-    if not match:
-        raise ValueError(f"Bad input basis units {in_type!r}")
-    return float(match.group(1))
+    if match := alat_re.match(in_type):
+        if alat is not None:
+            raise ValueError("Specifying alat twice is ambiguous")
+        return float(match.group(1))
+    raise ValueError(f"Bad input units for basis: {in_type!r}")
 
 
 def _basis_to_bohr(basis: Basis, in_type: str, alat: Optional[float]) -> Basis:
@@ -181,7 +182,7 @@ def convert_basis(
     if out_type not in _BASIS_COORDINATES:
         raise ValueError(f"Invalid basis coordinate type {out_type}.")
     # Short-circuit coordinate conversion
-    if in_type == out_type:
+    if in_type == out_type and not in_type.startswith("alat"):
         return basis
 
     if in_type.startswith("alat"):
