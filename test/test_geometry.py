@@ -34,17 +34,68 @@ GEOMETRY_DATA = {
         "species": ("B", "N"),
         "tau": np.array([[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]]),
     },
+    "BN_crystal_rev": {
+        "basis": 3.57 * np.array([[0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]),
+        "species": ("N", "B"),
+        "tau": np.array([[0.25, 0.25, 0.25], [0.0, 0.0, 0.0]]),
+    },
 }
 
 
-def check_basis(basis: Basis, basis_ref: Basis, **kw) -> None:
+def check_basis(basis: Basis, basis_ref: Basis, **kw: Any) -> None:
     assert np.isclose(basis, basis_ref, **kw).all()
 
 
 def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
+    from functools import total_ordering
+
     basis, species, tau = geom
     basis_ref, species_ref, tau_ref = geom_ref
-    assert np.isclose(basis, basis_ref).all()
+    check_basis(basis, basis_ref)
+
+    # Put both in canonical order
+    @total_ordering
+    class _VectorApproxOrder:
+        def __init__(self, obj: np.ndarray) -> None:
+            if obj.shape != (3,):
+                raise ValueError
+            self.obj = obj
+
+        def __eq__(self, other: object) -> bool:
+            if isinstance(other, np.ndarray):
+                return np.isclose(self.obj, other).all()
+            if isinstance(other, _VectorApproxOrder):
+                return np.isclose(self.obj, other.obj).all()
+            return NotImplemented
+
+        @staticmethod
+        def _vec_approx_lt(x: np.ndarray, y: np.ndarray) -> bool:
+            for xi, yi in zip(x, y):
+                if np.isclose(xi, yi):
+                    continue
+                return xi < yi
+            # All components equal
+            return False
+
+        def __lt__(self, other: object) -> bool:
+            if isinstance(other, np.ndarray):
+                if other.shape != (3,):
+                    return NotImplemented
+                return self._vec_approx_lt(self.obj, other)
+            if isinstance(other, _VectorApproxOrder):
+                return self._vec_approx_lt(self.obj, other.obj)
+            return NotImplemented
+
+    def _canonical_order(_species: Species, _tau: Tau) -> Tuple[Species, Tau]:
+        decorated = [(_VectorApproxOrder(x), i) for i, x in enumerate(_tau)]
+        decorated.sort()
+        idx = [i for _, i in decorated]
+        return tuple(_species[i] for i in idx), _tau[idx]
+
+    species, tau = _canonical_order(species, tau)
+    species_ref, tau_ref = _canonical_order(species_ref, tau_ref)
+
+    # Now geometry should match exactly
     assert species == species_ref
     assert np.isclose(tau, tau_ref).all()
 

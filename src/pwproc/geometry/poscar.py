@@ -251,6 +251,8 @@ def gen_poscar(
         Lines of the formatted POSCAR file
     """
     # pylint: disable=import-outside-toplevel
+    from operator import itemgetter
+
     from pwproc.geometry.cell import convert_positions, format_basis
     from pwproc.geometry.format_util import (
         POSITION_PRECISION,
@@ -271,21 +273,21 @@ def gen_poscar(
     yield "{}\n".format(scale)
     yield from format_basis(basis / scale)
 
-    # Group the positions by species
-    idx = tuple(i[0] for i in sorted(enumerate(species), key=lambda x: x[1]))
-    positions = positions[(idx,)]
-
     # Count each unique species
     species_counts = Counter(species)
+    s_names = sorted(species_counts)
+    s_counts = tuple(species_counts[name] for name in s_names)
 
     # Write atomic species
-    yield from columns(
-        (species_counts, species_counts.values()), min_space=1, left_pad=0
-    )
+    yield from columns((s_names, s_counts), min_space=1, left_pad=0)
 
     # Write selective dynamics flag
     if selective_dynamics is not None:
         yield "Selective dynamics\n"
+
+    # Group the positions by species
+    idx = tuple(i for i, _ in sorted(enumerate(species), key=itemgetter(1)))
+    positions = positions[(idx,)]
 
     # Write atomic positions
     if coordinate_type == "cartesian":
