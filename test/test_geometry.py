@@ -46,14 +46,10 @@ def check_basis(basis: Basis, basis_ref: Basis, **kw: Any) -> None:
     assert np.isclose(basis, basis_ref, **kw).all()
 
 
-def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
+def canonical_order(tau: Tau) -> Sequence[int]:
+    """Return an argsort based on a canonical order for the positions."""
     from functools import total_ordering
 
-    basis, species, tau = geom
-    basis_ref, species_ref, tau_ref = geom_ref
-    check_basis(basis, basis_ref)
-
-    # Put both in canonical order
     @total_ordering
     class _VectorApproxOrder:
         def __init__(self, obj: np.ndarray) -> None:
@@ -86,14 +82,23 @@ def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
                 return self._vec_approx_lt(self.obj, other.obj)
             return NotImplemented
 
-    def _canonical_order(_species: Species, _tau: Tau) -> Tuple[Species, Tau]:
-        decorated = [(_VectorApproxOrder(x), i) for i, x in enumerate(_tau)]
-        decorated.sort()
-        idx = [i for _, i in decorated]
+    decorated = [(_VectorApproxOrder(x), i) for i, x in enumerate(tau)]
+    decorated.sort()
+    return tuple(i for _, i in decorated)
+
+
+def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
+    basis, species, tau = geom
+    basis_ref, species_ref, tau_ref = geom_ref
+    check_basis(basis, basis_ref)
+
+    # Put both in canonical order
+    def _order_geom(_species: Species, _tau: Tau) -> Tuple[Species, Tau]:
+        idx = canonical_order(_tau)
         return tuple(_species[i] for i in idx), _tau[idx]
 
-    species, tau = _canonical_order(species, tau)
-    species_ref, tau_ref = _canonical_order(species_ref, tau_ref)
+    species, tau = _order_geom(species, tau)
+    species_ref, tau_ref = _order_geom(species_ref, tau_ref)
 
     # Now geometry should match exactly
     assert species == species_ref
@@ -331,8 +336,8 @@ def test_columns_fail(
 
     with expect_raise:
         result = columns(data)
-        assert len(result) == len(result)
-        for tst, ref in zip(result, result):
+        assert len(result) == len(out)
+        for tst, ref in zip(result, out):
             assert tst == ref
 
 
@@ -695,6 +700,10 @@ class TestPoscar:
             ("BN_crystal", (None, (True, True, True))),
             ("BN_crystal", (None, (False, True, True))),
             ("BN_crystal", ((False, False, False), (True, True, True))),
+            ("BN_crystal_rev", (None, None)),
+            ("BN_crystal_rev", (None, (True, True, True))),
+            ("BN_crystal_rev", (None, (False, True, True))),
+            ("BN_crystal_rev", ((False, False, False), (True, True, True))),
         ],
         indirect=["geometry_ref"],
     )
@@ -705,10 +714,13 @@ class TestPoscar:
             *geometry_ref, selective_dynamics=dynamics
         )
         out_lines = "".join(out_lines).split("\n")
+        geom_out = pwproc.geometry.poscar.read_poscar(out_lines)
         dynamics_out = pwproc.geometry.poscar.read_poscar_selective_dynamics(out_lines)
         assert len(dynamics) == len(dynamics_out)
-        for test, ref in zip(dynamics_out, dynamics):
-            assert test == ref
+        # Define a canonical order to sort the dynamics flags
+        idx_ref = canonical_order(geometry_ref[2])
+        idx = canonical_order(geom_out[2])
+        assert [dynamics[i] for i in idx_ref] == [dynamics_out[i] for i in idx]
 
 
 # writer/reader (something with more atoms) BTO (tetrahedral), LiNbO3,

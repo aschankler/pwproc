@@ -285,9 +285,11 @@ def gen_poscar(
     if selective_dynamics is not None:
         yield "Selective dynamics\n"
 
-    # Group the positions by species
+    # Group atoms by species; re-order positions and SD flags
     idx = tuple(i for i, _ in sorted(enumerate(species), key=itemgetter(1)))
     positions = positions[(idx,)]
+    if selective_dynamics is not None:
+        selective_dynamics = [selective_dynamics[i] for i in idx]
 
     # Write atomic positions
     if coordinate_type == "cartesian":
