@@ -226,7 +226,7 @@ class BasisParser(ParserBase[Basis]):
     """Capture basis converted to angstrom."""
 
     header_re = re.compile(
-        r"CELL_PARAMETERS (\()?(?P<coord>angstrom|bohr|alat= [.\d]+)(?(1)\))"
+        r"CELL_PARAMETERS (?:\()?(?P<coord>angstrom|bohr|alat= +[.\d]+)(?(1)\))"
     )
     basis_row_re = re.compile(r"(?:[\s]+-?[\d.]+){3}")
 
