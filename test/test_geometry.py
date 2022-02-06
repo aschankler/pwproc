@@ -38,6 +38,45 @@ GEOMETRY_DATA = {
         "species": ("N", "B"),
         "tau": np.array([[0.25, 0.25, 0.25], [0.0, 0.0, 0.0]]),
     },
+    "BTO": {
+        "basis": 4.0044569
+        * np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.04899014]]),
+        "species": ("Ba", "O", "O", "O", "Ti"),
+        "tau": np.array(
+            [
+                [0.5, 0.5, 0.004136000],
+                [0.0, 0.5, 0.479348987],
+                [0.5, 0.0, 0.479348987],
+                [0.0, 0.0, 0.958854020],
+                [0.0, 0.0, 0.524312973],
+            ]
+        ),
+    },
+    "LiNbO3": {
+        "basis": 5.5923991
+        * np.array(
+            [
+                [1.000000000, 0.000000000, 0.000000000],
+                [0.563873923, 0.825860883, 0.000000000],
+                [0.563873923, 0.297774270, 0.770309472],
+            ]
+        ),
+        "species": ("Li", "Li", "Nb", "Nb", "O", "O", "O", "O", "O", "O"),
+        "tau": np.array(
+            [
+                [0.717167974, 0.717167974, 0.717167974],
+                [0.217168003, 0.217168003, 0.217168003],
+                [0.999230981, 0.999230981, 0.999230981],
+                [0.499231011, 0.499231011, 0.499231011],
+                [0.639684021, 0.890367985, 0.279949009],
+                [0.890367985, 0.279949009, 0.639684021],
+                [0.279949009, 0.639684021, 0.890367985],
+                [0.390368015, 0.139684007, 0.779949009],
+                [0.139684007, 0.779949009, 0.390368015],
+                [0.779949009, 0.390368015, 0.139684007],
+            ]
+        ),
+    },
 }
 
 
@@ -83,7 +122,7 @@ def canonical_order(tau: Tau) -> Sequence[int]:
 
     decorated = [(_VectorApproxOrder(x), i) for i, x in enumerate(tau)]
     decorated.sort()
-    return tuple(i for _, i in decorated)
+    return [i for _, i in decorated]
 
 
 def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
@@ -387,10 +426,36 @@ class TestPoscar:
             "scale": 3.57,
             "geom": "BN_crystal",
         },
+        {"id": "BTO_cart", "comment": "BaTiO3", "scale": 1.0, "geom": "BTO"},
+        {
+            "id": "BTO_cart_scale",
+            "comment": "BaTiO3",
+            "scale": pytest.approx(4.004456),
+            "geom": "BTO",
+        },
+        {
+            "id": "BTO_direct",
+            "comment": "BaTiO3",
+            "scale": pytest.approx(4.004456),
+            "geom": "BTO",
+        },
+        {"id": "LiNbO3_cart", "comment": "Li2Nb2O6", "scale": 1.0, "geom": "LiNbO3"},
+        {
+            "id": "LiNbO3_cart_scale",
+            "comment": "Li2Nb2O6",
+            "scale": pytest.approx(5.592399),
+            "geom": "LiNbO3",
+        },
+        {
+            "id": "LiNbO3_direct",
+            "comment": "Li2Nb2O6",
+            "scale": pytest.approx(5.592399),
+            "geom": "LiNbO3",
+        },
     ]
 
     @pytest.fixture
-    def file(self, request, geometry_directory) -> Iterable[str]:
+    def file(self, request, geometry_directory: Path) -> Iterable[str]:
         geom_file = geometry_directory.joinpath("POSCAR_" + request.param)
         with open(geom_file) as f:
             return f.readlines()
@@ -416,13 +481,18 @@ class TestPoscar:
         scale_test = pwproc.geometry.poscar.read_poscar_scale(file)
         assert scale == scale_test
 
+    @pytest.mark.parametrize("coord", ["crystal", "angstrom", "bohr"])
     @pytest.mark.parametrize(
         ["geometry_ref", "file"],
         [pytest.param(dat["geom"], dat["id"], id=dat["id"]) for dat in geom_read_data],
         indirect=["geometry_ref", "file"],
     )
-    def test_read(self, geometry_ref: Geometry, file: Iterable[str]) -> None:
-        geom_test = pwproc.geometry.poscar.read_poscar(file, out_type="crystal")
+    def test_read(
+        self, geometry_ref: Geometry, file: Iterable[str], coord: str
+    ) -> None:
+        basis, species, tau = pwproc.geometry.poscar.read_poscar(file, out_type=coord)
+        tau = pwproc.geometry.cell.convert_positions(tau, basis, coord, "crystal")
+        geom_test = (basis, species, tau)
         check_geometry(geom_test, geometry_ref)
 
     @pytest.mark.parametrize("coord", ["direct", "cartesian"])
