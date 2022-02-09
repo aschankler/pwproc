@@ -27,58 +27,6 @@ def no_exception() -> Generator[None, None, None]:
 
 Geometry = Tuple[Basis, Species, Tau]
 
-GEOMETRY_DATA = {
-    "BN_crystal": {
-        "basis": 3.57 * np.array([[0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]),
-        "species": ("B", "N"),
-        "tau": np.array([[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]]),
-    },
-    "BN_crystal_rev": {
-        "basis": 3.57 * np.array([[0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]),
-        "species": ("N", "B"),
-        "tau": np.array([[0.25, 0.25, 0.25], [0.0, 0.0, 0.0]]),
-    },
-    "BTO": {
-        "basis": 4.0044569
-        * np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.04899014]]),
-        "species": ("Ba", "O", "O", "O", "Ti"),
-        "tau": np.array(
-            [
-                [0.5, 0.5, 0.004136000],
-                [0.0, 0.5, 0.479348987],
-                [0.5, 0.0, 0.479348987],
-                [0.0, 0.0, 0.958854020],
-                [0.0, 0.0, 0.524312973],
-            ]
-        ),
-    },
-    "LiNbO3": {
-        "basis": 5.5923991
-        * np.array(
-            [
-                [1.000000000, 0.000000000, 0.000000000],
-                [0.563873923, 0.825860883, 0.000000000],
-                [0.563873923, 0.297774270, 0.770309472],
-            ]
-        ),
-        "species": ("Li", "Li", "Nb", "Nb", "O", "O", "O", "O", "O", "O"),
-        "tau": np.array(
-            [
-                [0.717167974, 0.717167974, 0.717167974],
-                [0.217168003, 0.217168003, 0.217168003],
-                [0.999230981, 0.999230981, 0.999230981],
-                [0.499231011, 0.499231011, 0.499231011],
-                [0.639684021, 0.890367985, 0.279949009],
-                [0.890367985, 0.279949009, 0.639684021],
-                [0.279949009, 0.639684021, 0.890367985],
-                [0.390368015, 0.139684007, 0.779949009],
-                [0.139684007, 0.779949009, 0.390368015],
-                [0.779949009, 0.390368015, 0.139684007],
-            ]
-        ),
-    },
-}
-
 
 def check_basis(basis: Basis, basis_ref: Basis, **kw: Any) -> None:
     assert np.isclose(basis, basis_ref, **kw).all()
@@ -412,44 +360,24 @@ def format_positions(
 
 class TestPoscar:
     geom_read_data = [
-        {"id": "BN_crys", "comment": "Cubic BN", "scale": 3.57, "geom": "BN_crystal"},
-        {"id": "BN_cart", "comment": "Cubic BN", "scale": 3.57, "geom": "BN_crystal"},
-        {
-            "id": "BN_crys_sd",
-            "comment": "Cubic BN",
-            "scale": 3.57,
-            "geom": "BN_crystal",
-        },
-        {
-            "id": "BN_cart_sd",
-            "comment": "Cubic BN",
-            "scale": 3.57,
-            "geom": "BN_crystal",
-        },
+        {"id": "BN_crys", "comment": "Cubic BN", "scale": 3.57, "geom": "BN"},
+        {"id": "BN_cart", "comment": "Cubic BN", "scale": 3.57, "geom": "BN"},
+        {"id": "BN_crys_sd", "comment": "Cubic BN", "scale": 3.57, "geom": "BN"},
+        {"id": "BN_cart_sd", "comment": "Cubic BN", "scale": 3.57, "geom": "BN"},
         {"id": "BTO_cart", "comment": "BaTiO3", "scale": 1.0, "geom": "BTO"},
-        {
-            "id": "BTO_cart_scale",
-            "comment": "BaTiO3",
-            "scale": pytest.approx(4.004456),
-            "geom": "BTO",
-        },
-        {
-            "id": "BTO_direct",
-            "comment": "BaTiO3",
-            "scale": pytest.approx(4.004456),
-            "geom": "BTO",
-        },
+        {"id": "BTO_cart_scale", "comment": "BaTiO3", "scale": 4.004456, "geom": "BTO"},
+        {"id": "BTO_direct", "comment": "BaTiO3", "scale": 4.004456, "geom": "BTO"},
         {"id": "LiNbO3_cart", "comment": "Li2Nb2O6", "scale": 1.0, "geom": "LiNbO3"},
         {
             "id": "LiNbO3_cart_scale",
             "comment": "Li2Nb2O6",
-            "scale": pytest.approx(5.592399),
+            "scale": 5.592399,
             "geom": "LiNbO3",
         },
         {
             "id": "LiNbO3_direct",
             "comment": "Li2Nb2O6",
-            "scale": pytest.approx(5.592399),
+            "scale": 5.592399,
             "geom": "LiNbO3",
         },
     ]
@@ -479,7 +407,7 @@ class TestPoscar:
     )
     def test_scale(self, scale: float, file: Iterable[str]) -> None:
         scale_test = pwproc.geometry.poscar.read_poscar_scale(file)
-        assert scale == scale_test
+        assert pytest.approx(scale) == scale_test
 
     @pytest.mark.parametrize("coord", ["crystal", "angstrom", "bohr"])
     @pytest.mark.parametrize(
@@ -499,7 +427,7 @@ class TestPoscar:
     @pytest.mark.parametrize("scale", [1.0, 3.57])
     @pytest.mark.parametrize(
         ["geometry_ref", "comment"],
-        [(k, k) for k in GEOMETRY_DATA],
+        [("BN", "BN"), ("BN_rev", "BN"), ("BTO", "BaTiO3"), ("LiNbO3", "LiNbO3")],
         indirect=["geometry_ref"],
     )
     def test_write(
@@ -543,14 +471,14 @@ class TestPoscar:
         "geometry_ref,dynamics",
         [
             pytest.param("BN_crystal", None, marks=pytest.mark.xfail),
-            ("BN_crystal", (None, None)),
-            ("BN_crystal", (None, (True, True, True))),
-            ("BN_crystal", (None, (False, True, True))),
-            ("BN_crystal", ((False, False, False), (True, True, True))),
-            ("BN_crystal_rev", (None, None)),
-            ("BN_crystal_rev", (None, (True, True, True))),
-            ("BN_crystal_rev", (None, (False, True, True))),
-            ("BN_crystal_rev", ((False, False, False), (True, True, True))),
+            ("BN", (None, None)),
+            ("BN", (None, (True, True, True))),
+            ("BN", (None, (False, True, True))),
+            ("BN", ((False, False, False), (True, True, True))),
+            ("BN_rev", (None, None)),
+            ("BN_rev", (None, (True, True, True))),
+            ("BN_rev", (None, (False, True, True))),
+            ("BN_rev", ((False, False, False), (True, True, True))),
         ],
         indirect=["geometry_ref"],
     )
