@@ -93,12 +93,16 @@ def check_geometry(geom: Geometry, geom_ref: Geometry) -> None:
 
 @pytest.fixture
 def geometry_directory() -> Path:
-    return Path(__file__).parent.joinpath("data", "geometry")
+    return Path(__file__).parent.joinpath("data", "poscar")
 
 
 @pytest.fixture
-def geometry_ref(request) -> Geometry:
-    data = GEOMETRY_DATA[request.param]
+def geometry_ref(request, monkeypatch) -> Geometry:
+    data_dir = Path(__file__).parent.joinpath("data")
+    monkeypatch.syspath_prepend(data_dir)
+    geometry_test_data = pytest.importorskip("geometry_test_data")
+
+    data = geometry_test_data.GEOMETRY_DATA[request.param]
     basis = pwproc.geometry.cell.Basis(data["basis"].copy())
     species = pwproc.geometry.cell.Species(data["species"])
     tau = pwproc.geometry.cell.Tau(data["tau"].copy())
