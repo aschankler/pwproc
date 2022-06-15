@@ -284,7 +284,7 @@ def format_basis(
         precision: Precision to format lattice vectors
 
     Returns:
-        Formatted basis as a single string
+        List of lines of the formatted basis
     """
 
     def _field_fmt(value: float) -> str:
