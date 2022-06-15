@@ -84,7 +84,8 @@ class TestPoscar:
         {"id": "BN_cart_sd", "comment": "Cubic BN", "scale": 3.57, "geom": "BN"},
         {"id": "BTO_cart", "comment": "BaTiO3", "scale": 1.0, "geom": "BTO"},
         {"id": "BTO_cart_scale", "comment": "BaTiO3", "scale": 4.004456, "geom": "BTO"},
-        {"id": "BTO_direct", "comment": "BaTiO3", "scale": 4.004456, "geom": "BTO"},
+        {"id": "BTO_crys", "comment": "BaTiO3", "scale": 1.0, "geom": "BTO"},
+        {"id": "BTO_crys_scale", "comment": "BaTiO3", "scale": 4.004456, "geom": "BTO"},
         {"id": "LiNbO3_cart", "comment": "Li2Nb2O6", "scale": 1.0, "geom": "LiNbO3"},
         {
             "id": "LiNbO3_cart_scale",
