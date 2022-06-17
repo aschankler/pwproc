@@ -1,165 +1,144 @@
 """Read/Write for XSF file format."""
 
-import re
 from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
+
 import numpy as np
 
 from pwproc.geometry import Basis, Species, Tau
 
 
-def _get_next_line(lines):
-    # type: (Iterator[str]) -> str
-    """Consume items from `lines` until a non-comment,
-    non-blank line is reached
-    """
+def _get_next_line(lines: Iterator[str]) -> str:
+    """Consume items from `lines` until a non-comment, non-blank line is reached."""
     while True:
         line = next(lines).strip()
-
         # Blank line
-        if line == '':
+        if line == "":
             continue
         # Comment line
-        if line[0] == '#':
+        if line[0] == "#":
             continue
-
         return line.strip()
 
 
-def _match_primvec_header(line):
-    # type: (str) -> Union[int, None]
-    header_re = r"PRIMVEC([ \t]+[\d]+)?"
-
-    # Match the header
-    m = re.match(header_re, line)
-    if not m:
+def _read_primvec_header(header_line: str) -> Optional[int]:
+    if not header_line.startswith("PRIMVEC"):
         raise ValueError("PRIMVEC not found")
-    else:
-        s = m.group(1)
-        if s is not None:
-            s = int(s)
-        return s
+    step = None
+    if len(header_line.split()) > 1:
+        step = int(header_line.split()[1])
+    return step
 
 
-def _parse_primvec_content(lines):
-    # type: (Iterator[str]) -> Basis
-    from pwproc.util import parse_vector
-
-    # Parse the basis
-    basis = tuple(next(lines) for _ in range(3))
-    basis = np.array(tuple(map(parse_vector, basis)))
-
-    return Basis(basis)
-
-
-def _read_primvec(lines, step=None):
-    # type: (Iterator[str], Optional[int]) -> Basis
-    # Match the header
-    s = _match_primvec_header(_get_next_line(lines))
-    assert(s == step)
-
-    return _parse_primvec_content(lines)
+def _read_primvec(lines: Iterator[str]) -> Tuple[Basis, Optional[int]]:
+    # Parse the header
+    step = _read_primvec_header(_get_next_line(lines))
+    # Parse the content
+    basis_lines = []
+    for _ in range(3):
+        lat_vec = tuple(float(x) for x in _get_next_line(lines).split())
+        assert len(lat_vec) == 3
+        basis_lines.append(lat_vec)
+    basis = Basis(np.array(basis_lines))
+    return basis, step
 
 
-def _read_first_primvec(lines):
-    # type: (Iterator[str]) -> Tuple[Basis, bool]
-    # Match the header
-    s = _match_primvec_header(_get_next_line(lines))
-    animate_cell = (s is not None)
-
-    if animate_cell:
-        assert(s == 1)
-
-    return _parse_primvec_content(lines), animate_cell
-
-
-def _read_primcoord(lines, step=None):
-    # type: (Iterator[str], Optional[int]) -> Tuple[Species, Tau]
-    # Match header
-    header_re = r"PRIMCOORD([ \t]+[\d]+)?"
-    m = re.match(header_re, _get_next_line(lines))
-    if not m:
+def _read_primcoord_header(header_line: str) -> Optional[int]:
+    if not header_line.startswith("PRIMCOORD"):
         raise ValueError("PRIMCOORD not found")
-    else:
-        s = m.group(1)
-        if s is not None:
-            s = int(m.group(1))
-        assert(s == step)
+    step = None
+    if len(header_line.split()) > 1:
+        step = int(header_line.split()[1])
+    return step
 
-    # Get number of atoms
-    nat = int(re.match(r"([\d]+)[ \t]+1", _get_next_line(lines)).group(1))
 
-    # Read coordinate lines
-    coord_lines = [_get_next_line(lines) for _ in range(nat)]
+def _read_primcoord(lines: Iterator[str]) -> Tuple[Species, Tau, Optional[int]]:
+    # Parse the header
+    step = _read_primcoord_header(_get_next_line(lines))
+    _nat, _flag = _get_next_line(lines).split()
+    assert _flag == "1"
+    nat = int(_nat)
 
     # Parse coordinates and species
     species = []
-    tau = []
-    for line in coord_lines:
-        line = line.split()
+    positions = []
+    for _ in range(nat):
+        line = _get_next_line(lines).split()
         species.append(line[0])
-        tau.append(tuple(map(float, line[1:])))
+        positions.append(tuple(float(x) for x in line[1:4]))
 
-    species = tuple(species)
-    tau = np.array(tau)
-
-    assert(len(tau) == len(species) == nat)
-    return Species(species), Tau(tau)
+    return Species(tuple(species)), Tau(np.array(positions)), step
 
 
-def _read_xsf_single(lines):
-    # type: (Iterator[str]) -> Tuple[Basis, Species, Tau]
-    # Get basis
-    basis = _read_primvec(lines)
-    species, tau = _read_primcoord(lines)
+def _read_xsf_single(lines: Iterable[str]) -> Tuple[Basis, Species, Tau]:
+    """Read a single-structure XSF file."""
+    lines = iter(lines)
+
+    basis, step = _read_primvec(lines)
+    assert step is None
+    species, tau, step = _read_primcoord(lines)
+    assert step is None
 
     return basis, species, tau
 
 
-def _read_xsf_animate(lines, nsteps):
-    # type: (Iterator[str], int) -> Tuple[Sequence[Basis], Species, Sequence[Tau]]
-    # Decide if animating the cell
-    b, animate_cell = _read_first_primvec(lines)
-
+def _read_xsf_animate(
+    lines: Iterator[str], n_steps: int
+) -> Tuple[Union[Basis, Sequence[Basis]], Species, Sequence[Tau]]:
     # Read the first step
-    species, t = _read_primcoord(lines, 1)
+    step_basis, step = _read_primvec(lines)
+    animate_cell = step is not None
+    species, step_pos, step = _read_primcoord(lines)
+    assert step == 1
 
     # Initialize accumulators
-    basis = [b]
-    tau = [t]
+    if animate_cell:
+        basis = [step_basis]
+    else:
+        basis = step_basis
+    positions = [step_pos]
 
     # Read the remaining steps
-    for i in range(2, nsteps + 1):
+    for i in range(2, n_steps + 1):
         if animate_cell:
-            b = _read_primvec(lines, i)
+            step_basis, step = _read_primvec(lines)
+            assert step == i
+            basis.append(step_basis)
+        step_spec, step_pos, step = _read_primcoord(lines)
+        assert step == i
+        assert species == step_spec
+        positions.append(step_pos)
 
-        s, t = _read_primcoord(lines, i)
-        basis.append(b)
-        assert(s == species)
-        tau.append(t)
-
-    return basis, species, tau
+    return basis, species, positions
 
 
-def read_xsf(lines):
-    # type: (Iterable[str]) -> Tuple[Basis, Species, Tau]
+def read_xsf(
+    lines: Iterable[str], *, axsf_allowed: bool = True, axsf_expected: bool = False
+) -> Tuple[Union[Basis, Sequence[Basis]], Species, Union[Tau, Sequence[Tau]]]:
     lines = iter(lines)
-    line = _get_next_line(lines)
 
-    animate_re = r"ANIMSTEPS[ \t]+([\d]+)"
-
-    if re.match(animate_re, line):
-        # Reading an animation
-        n_steps = re.match(animate_re, line).group(1)
-        n_steps = int(n_steps)
-        line = _get_next_line(lines)
-        assert(line == 'CRYSTAL')
-        b, s, t = _read_xsf_animate(lines, n_steps)
+    # Read the first two header lines
+    header_line = _get_next_line(lines)
+    if header_line.startswith("ANIMSTEPS"):
+        if not axsf_allowed:
+            raise RuntimeError(".axsf files not allowed")
+        # Reading animated file
+        n_steps = int(header_line.split()[1])
+        header_line = _get_next_line(lines)
+        assert header_line.startswith("CRYSTAL") or header_line.startswith("POLYMER")
+        return _read_xsf_animate(lines, n_steps)
     else:
-        # Reading a single structure
-        assert(line == 'CRYSTAL')
-        b, s, t = _read_xsf_single(lines)
+        if axsf_expected:
+            raise RuntimeError(".axsf file expected")
+        # Reading single-structure xsf
+        assert header_line.startswith("CRYSTAL") or header_line.startswith("POLYMER")
+        return _read_xsf_single(lines)
 
-    return b, s, t
+
+def read_axsf(
+    lines: Iterable[str],
+) -> Tuple[Union[Basis, Sequence[Basis]], Species, Sequence[Tau]]:
+    """Read a *.axsf file with a sequence of structures."""
+    return read_xsf(lines, axsf_expected=True)
 
 
 def gen_xsf(basis, species, tau, write_header=True, step=None):
@@ -170,14 +149,13 @@ def gen_xsf(basis, species, tau, write_header=True, step=None):
     nat = len(species)
 
     if write_header:
-        yield 'CRYSTAL\n'
+        yield "CRYSTAL\n"
 
-    step = ' {}'.format(step) if step is not None else ''
+    step_str = f" {step:d}" if step is not None else ""
 
-    yield 'PRIMVEC{}\n'.format(step)
+    yield f"PRIMVEC{step_str}\n"
     yield from format_basis(basis)
-    yield "\n"
-    yield "PRIMCOORD{}\n".format(step)
+    yield f"PRIMCOORD{step_str}\n"
     yield "{} 1\n".format(nat)
     yield from format_positions(species, tau)
     yield "\n"
@@ -188,9 +166,12 @@ def gen_xsf_animate(basis, species, tau):
     from itertools import chain
 
     nsteps = len(basis)
-    yield 'ANIMSTEPS {}\n'.format(nsteps)
-    yield 'CRYSTAL\n'
+    yield "ANIMSTEPS {}\n".format(nsteps)
+    yield "CRYSTAL\n"
 
-    yield from chain(*(gen_xsf(basis[i], species, tau[i],
-                               write_header=False, step=(i+1))
-                       for i in range(nsteps)))
+    yield from chain(
+        *(
+            gen_xsf(basis[i], species, tau[i], write_header=False, step=(i + 1))
+            for i in range(nsteps)
+        )
+    )
