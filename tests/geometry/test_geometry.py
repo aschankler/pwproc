@@ -17,14 +17,13 @@ from tests.geometry.util import (
 
 
 @pytest.fixture
-def geometry_directory() -> Path:
-    return Path(__file__).parent.joinpath("data", "poscar")
+def data_directory() -> Path:
+    return Path(__file__).parent.joinpath("data")
 
 
 @pytest.fixture
-def geometry_ref(request, monkeypatch) -> Geometry:
-    data_dir = Path(__file__).parent.joinpath("data")
-    monkeypatch.syspath_prepend(data_dir)
+def geometry_ref(data_directory, request, monkeypatch) -> Geometry:
+    monkeypatch.syspath_prepend(data_directory)
     geometry_test_data = pytest.importorskip("geometry_test_data")
 
     data = geometry_test_data.GEOMETRY_DATA[request.param]
@@ -34,12 +33,6 @@ def geometry_ref(request, monkeypatch) -> Geometry:
     return basis, species, tau
 
 
-# Todo: tests cell
-# ------------------
-# Test `cell` module
-# ------------------
-
-
 # Todo: tests xsf
 # ------------------
 # Test XSF module
@@ -47,24 +40,44 @@ def geometry_ref(request, monkeypatch) -> Geometry:
 
 
 class TestXSF:
+    geom_read_data = [
+        {"id": "BN", "geom": "BN"},
+        {"id": "BTO", "geom": "BTO"},
+        {"id": "LiNbO3", "geom": "LiNbO3"},
+    ]
+
     @pytest.fixture
-    def file(self, request, geometry_directory: Path) -> Iterable[str]:
-        geom_file = geometry_directory.joinpath(request.param + ".xsf")
+    def file(self, request, data_directory: Path) -> Iterable[str]:
+        geom_file = data_directory.joinpath("xsf", request.param + ".xsf")
         with open(geom_file) as f:
             return f.readlines()
 
-    @pytest.mark.skip
+    @pytest.mark.parametrize(
+        ["geometry_ref", "file"],
+        [pytest.param(dat["geom"], dat["id"], id=dat["id"]) for dat in geom_read_data],
+        indirect=["geometry_ref", "file"],
+    )
     def test_read_xsf(self, geometry_ref: Geometry, file: Iterable[str]) -> None:
-        geom_test = pwproc.geometry.xsf.read_xsf(file, axsf_allowed=False)
+        basis, species, tau = pwproc.geometry.xsf.read_xsf(file, axsf_allowed=False)
+        tau = pwproc.geometry.cell.convert_positions(tau, basis, "angstrom", "crystal")
+        geom_test = basis, species, tau
         check_geometry(geom_test, geometry_ref)
 
     @pytest.mark.skip
     def test_read_axsf(self, trajectory_ref: Trajectory, file: Iterable[str]) -> None:
         ...
 
-    @pytest.mark.skip
-    def test_gen_xsf(self):
-        ...
+    @pytest.mark.parametrize(
+        "geometry_ref", ["BN", "BTO", "LiNbO3"], indirect=["geometry_ref"]
+    )
+    def test_gen_xsf(self, geometry_ref: Geometry) -> None:
+        basis, species, pos = geometry_ref
+        pos = pwproc.geometry.cell.convert_positions(pos, basis, "crystal", "angstrom")
+        geom_ref_cart = basis, species, pos
+        out_lines = pwproc.geometry.xsf.gen_xsf(*geom_ref_cart)
+        out_lines = "".join(out_lines).split("\n")
+        geom_test = pwproc.geometry.xsf.read_xsf(out_lines, axsf_allowed=False)
+        check_geometry(geom_test, geom_ref_cart)
 
     @pytest.mark.skip
     def test_gen_axsf(self):
@@ -102,8 +115,8 @@ class TestPoscar:
     ]
 
     @pytest.fixture
-    def file(self, request, geometry_directory: Path) -> Iterable[str]:
-        geom_file = geometry_directory.joinpath("POSCAR_" + request.param)
+    def file(self, request, data_directory: Path) -> Iterable[str]:
+        geom_file = data_directory.joinpath("poscar", "POSCAR_" + request.param)
         with open(geom_file) as f:
             return f.readlines()
 
