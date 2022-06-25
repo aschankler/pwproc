@@ -38,7 +38,10 @@ def get_save_file(path):
     """Extract the prefix from pw.x output."""
     from pwproc.util import parser_one_line
 
-    save_re = re.compile(r"^[ \t]+Writing output data file (?:\./)?([-.\w]+).save/?$")
+    save_re = re.compile(
+        r"^[ \t]+(?:Writing all to output data dir |Writing output data file )"
+        r"(?:\./)?([-.\w]+)\.save/?"
+    )
     save_parser = parser_one_line(save_re, lambda m: m.group(1))
 
     with open(path) as f:
