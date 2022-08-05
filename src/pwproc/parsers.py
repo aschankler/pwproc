@@ -39,7 +39,8 @@ def get_save_file(path):
     from pwproc.util import parser_one_line
 
     save_re = re.compile(
-        r"^[ \t]+(?:Writing all to output data dir |Writing output data file )"
+        r"^[ \t]+(?:Writing all to output data dir|Writing output data file"
+        "|Writing config-only to output data dir) "
         r"(?:\./)?([-.\w]+)\.save/?"
     )
     save_parser = parser_one_line(save_re, lambda m: m.group(1))
