@@ -6,7 +6,7 @@ verify_ssl = true
 [dev-packages]
 isort = "*"
 flake8 = "*"
-black = "==21.7b0"
+black = "*"
 build = "*"
 darker = "*"
 flake8-bugbear = "*"
@@ -17,7 +17,7 @@ pytest = "*"
 
 [packages]
 numpy = "*"
-scipy = "*"
+scipy = ">=1.10.0"
 
 [pipenv]
 allow_prereleases = true
