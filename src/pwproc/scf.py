@@ -2,6 +2,8 @@
 
 import sys
 
+from pwproc.write_data import write_xsf
+
 
 def get_scf_energy(path):
     # type: (str) -> float
@@ -77,8 +79,7 @@ def run_scf(args):
         args.energy.close()
 
     if args.xsf:
-        from pwproc.relax import write_xsf
-        write_xsf(args.xsf, data)
+        write_xsf(args.xsf, data.values())
 
 
 if __name__ == '__main__':

@@ -1,21 +1,20 @@
 """Parser for pw.x relax output."""
 
 from argparse import Namespace
+from pathlib import Path
 from typing import (
     Any,
     Callable,
-    Generator,
     Iterable,
-    Mapping,
     Optional,
     Sequence,
     Set,
-    TextIO,
     Tuple,
     Union,
 )
 
 from pwproc.geometry.data import GeometryData, RelaxData
+from pwproc.write_data import write_xsf, write_data
 
 
 def parse_file(path, tags):
@@ -27,8 +26,10 @@ def parse_file(path, tags):
     return (prefix, final_data, relax_data)
 
 
-def parse_files(paths, tags):
-    data = {}
+def parse_files(
+    paths: Iterable[Path], tags: Optional[Iterable[str]]
+) -> list[tuple[Optional[GeometryData], RelaxData]]:
+    data: dict[str, tuple[Optional[GeometryData], RelaxData]] = {}
 
     for p in paths:
         prefix, final, relax = parse_file(p, tags)
@@ -49,134 +50,7 @@ def parse_files(paths, tags):
                 # Join arbitrarily
                 data[prefix] = (final, old_relax | relax)
 
-    return data
-
-
-_DataFormatFn = Callable[[GeometryData], str]
-
-
-def _format_data_output(
-    prefix: str,
-    tag: str,
-    data_record: Union[GeometryData, RelaxData],
-    extra_tags: Optional[Mapping[str, Any]],
-) -> Generator[str, None, None]:
-    def _fmt_force(_geom_data: GeometryData) -> str:
-        _precision = 3
-        force, scf_corr = _geom_data.force
-        if abs(scf_corr) > 10 ** -_precision:
-            corr_fstr = "{{:0{:d}.{:d}f}}".format(_precision + 2, _precision)
-        else:
-            corr_fstr = "{{:0{:d}.{:d}e}}".format(_precision + 5, _precision - 1)
-        corr_fmt = corr_fstr.format(scf_corr)
-        return "{:05.3f}  {}".format(force, corr_fmt)
-
-    def _fmt_pressure(_geom_data: GeometryData) -> str:
-        tot_press, _, press_tensor_kbar = _geom_data.press
-        max_press = abs(press_tensor_kbar).max()
-        return f"{tot_press: .2f}  {max_press: .2f}"
-
-    def _fmt_volume(_geom_data: GeometryData) -> str:
-        # pylint: disable=import-outside-toplevel
-        from pwproc.geometry.cell import cell_volume
-
-        volume = cell_volume(_geom_data.basis)
-        return f"{volume:.2f}"
-
-    def _fmt_lat(_geom_data: GeometryData) -> str:
-        # pylint: disable=import-outside-toplevel
-        from pwproc.geometry.cell import cell_parameters
-
-        if extra_tags is None or "lat" not in extra_tags:
-            raise RuntimeError("Extra data for 'lat' formatter not present.")
-        fields = sorted(x[1] for x in extra_tags["lat"])
-        cell_params = cell_parameters(_geom_data.basis)
-        formatted_fields = [f"{cell_params[i]:f}" for i in fields]
-        return "  ".join(formatted_fields)
-
-    formatters: Mapping[str, _DataFormatFn] = {
-        "energy": lambda _dat: f"{_dat.energy:.5f}",
-        "force": _fmt_force,
-        "press": _fmt_pressure,
-        "mag": lambda _dat: f"{_dat.mag[0]}  {_dat.mag[1]}",
-        "vol": _fmt_volume,
-        "lat": _fmt_lat,
-    }
-
-    # Select the formatting function
-    _fmt = formatters[tag]
-
-    # Extract and format data from the record
-    if isinstance(data_record, GeometryData):
-        yield "{}: {}".format(prefix, _fmt(data_record))
-        yield "\n"
-    else:
-        yield "{} {}\n".format(prefix, len(data_record))
-        for _step in data_record:
-            yield _fmt(_step)
-            yield "\n"
-
-
-def write_data(
-    relax_data: Mapping[str, Union[GeometryData, RelaxData]],
-    data_file: TextIO,
-    data_tags: Iterable[str],
-    extra_tags: Optional[Mapping[str, Any]] = None,
-):
-    """Write additional data to file."""
-
-    def _lat_header() -> str:
-        _units = {
-            "a": "A",
-            "b": "A",
-            "c": "A",
-            "alpha": "deg",
-            "beta": "deg",
-            "gamma": "deg",
-        }
-        if extra_tags is None or "lat" not in extra_tags:
-            # FixMe: cannot raise error, since this will be called even if the
-            # header is never printed. None should raise error when it is joined
-            # with newline, but this is not a good solution
-            return None
-        fields = sorted(extra_tags["lat"], key=lambda x: x[1])
-        header_parts = ["{} ({})".format(name, _units[name]) for name, _ in fields]
-        return "  ".join(header_parts)
-
-    headers = {
-        "energy": "Energy (Ry)",
-        "force": "Total force   SCF correction  (Ry/au)",
-        "press": "Total Press.  Max Press.  (kbar)",
-        "mag": "Total mag.  Abs. mag.  (Bohr mag/cell)",
-        "vol": "Unit cell volume (A^3)",
-        "lat": _lat_header(),
-    }
-
-    for tag in data_tags:
-        # Write header for this data type
-        data_file.write(headers[tag] + "\n")
-        # Write data for each file
-        for prefix, record in relax_data.items():
-            data_file.writelines(_format_data_output(prefix, tag, record, extra_tags))
-        data_file.write("\n")
-
-
-def write_xsf(xsf, data):
-    # type: (str, Mapping[str, GeometryData]) -> None
-    """Write structure data to xsf files."""
-    if '{PREFIX}' not in xsf:
-        if len(data) != 1:
-            raise ValueError('Saving multiple structures to same file')
-        else:
-            # Grab the first (and only) entry
-            save_data = zip((xsf,), data.values())
-    else:
-        save_data = ((xsf.format(PREFIX=pref), geom_data)
-                     for pref, geom_data in data.items())
-
-    for path, geom_data in save_data:
-        with open(path, 'w') as xsf_f:
-            xsf_f.writelines(geom_data.to_xsf())
+    return list(data.values())
 
 
 def parse_args_relax(args):
@@ -389,23 +263,22 @@ def run_relax(args):
     relax_data = parse_files(args.in_file, parser_tags)
 
     # Take the desired step
-    out_data = {}
-    for prefix, data in relax_data.items():
-        final, relax = data
+    out_data = []
+    for final, relax in relax_data:
         if args.endpoint == 'final':
             if final is None:
-                print('Relaxation did not finish for {}'.format(prefix))
+                print(f"Relaxation did not finish for {relax.prefix}")
             else:
-                out_data[prefix] = final
+                out_data.append(final)
         elif args.endpoint == 'initial':
-            out_data[prefix] = relax.get_init()
+            out_data.append(relax.get_init())
         elif args.endpoint == 'last':
             if final is None:
-                out_data[prefix] = relax[-1]
+                out_data.append(relax[-1])
             else:
-                out_data[prefix] = final
+                out_data.append(final)
         else:
-            out_data[prefix] = relax
+            out_data.append(relax)
 
     # Write XSF file
     if args.xsf:
