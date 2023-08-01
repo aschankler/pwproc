@@ -13,6 +13,7 @@ def show_usage():
         berry
         rattle
         template
+        xsf
         help
     """
     print(usage)
@@ -35,6 +36,10 @@ def run_cli(cli_args):
         from pwproc.relax import parse_args_relax, run_relax
         args = parse_args_relax(cli_args)
         run_relax(args)
+    elif sub_cmd == "xsf":
+        from pwproc.xsfmod import parse_args_xsf, run_xsf
+        args = parse_args_xsf(cli_args)
+        run_xsf(args)
     elif sub_cmd == "fermi":
         from pwproc.fermi import parse_args_fermi, run_fermi
         args = parse_args_fermi(cli_args)
