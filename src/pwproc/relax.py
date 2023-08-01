@@ -2,19 +2,10 @@
 
 from argparse import Namespace
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Iterable, Optional, Sequence, Set
 
 from pwproc.geometry.data import GeometryData, RelaxData
-from pwproc.write_data import write_xsf, write_data
+from pwproc.write_data import add_data_args, add_xsf_arg, write_data, write_xsf
 
 
 def parse_file(path, tags):
@@ -57,7 +48,7 @@ def parse_args_relax(args):
     # type: (Sequence[str]) -> Namespace
     """Argument parser for `relax` subcommand."""
     import sys
-    from argparse import Action, ArgumentParser, FileType
+    from argparse import ArgumentParser, FileType
     from pathlib import Path
 
     parser = ArgumentParser(
@@ -72,15 +63,9 @@ def parse_args_relax(args):
         metavar="FILE",
         help="List of pw.x output files",
     )
-    parser.add_argument(
-        "--xsf",
-        action="store",
-        metavar="FILE",
-        help=(
-            "Write xsf structures to file. The key `{PREFIX}` in FILE is replaced by"
-            " the calculation prefix"
-        ),
-    )
+
+    add_xsf_arg(parser)
+
     parser.add_argument(
         "--data",
         action="store",
@@ -89,137 +74,8 @@ def parse_args_relax(args):
         metavar="FILE",
         help="Output file for structure data",
     )
-    data_grp = parser.add_argument_group(
-        "Data fields", "Specify additional data to gather from output files"
-    )
-    data_grp.add_argument(
-        "--energy",
-        "-e",
-        action="append_const",
-        dest="dtags",
-        const="energy",
-        help="Write energy (in Ry)",
-    )
-    data_grp.add_argument(
-        "--force",
-        "-f",
-        action="append_const",
-        dest="dtags",
-        const="force",
-        help="Output force data",
-    )
-    data_grp.add_argument(
-        "--press",
-        "-p",
-        action="append_const",
-        dest="dtags",
-        const="press",
-        help="Output pressure data",
-    )
-    data_grp.add_argument(
-        "--mag",
-        "-m",
-        action="append_const",
-        dest="dtags",
-        const="mag",
-        help="Output magnetization data",
-    )
-    data_grp.add_argument(
-        "--volume",
-        "-v",
-        action="append_const",
-        dest="dtags",
-        const="vol",
-        help="Output unit cell volume",
-    )
 
-    def lat_param_type(value):
-        # type: (str) -> Tuple[str, int]
-        _param_names = ("a", "b", "c", "alpha", "beta", "gamma")
-        value = value.strip().lower()
-        if value not in _param_names:
-            raise ValueError
-        return value, _param_names.index(value)
-
-    class ExtraDataAction(Action):
-        # pylint: disable=too-many-arguments,too-few-public-methods
-        _extra_data_dest = "extra_data"
-
-        # noinspection PyShadowingBuiltins
-        def __init__(
-            # pylint: disable=redefined-builtin
-            self,
-            option_strings: Sequence[str],
-            dest: str,
-            nargs: Optional[Union[int, str]] = None,
-            const: Any = None,
-            default: Any = None,
-            type: Union[Callable[[str], Any], FileType, None] = None,
-            choices: Optional[Iterable[Any]] = None,
-            required: bool = False,
-            help: Optional[str] = None,
-            metavar: Optional[Union[str, Tuple[str, ...]]] = None,
-        ):
-            if nargs is None:
-                raise ValueError("nargs may not be None")
-            if nargs == 0:
-                raise ValueError("nargs must be nonzero")
-            super().__init__(
-                option_strings=option_strings,
-                dest=dest,
-                nargs=nargs,
-                const=const,
-                default=default,
-                type=type,
-                choices=choices,
-                required=required,
-                help=help,
-                metavar=metavar,
-            )
-
-        def __call__(
-            self,
-            parser: ArgumentParser,
-            namespace: Namespace,
-            values: Union[str, Sequence[Any], None],
-            option_string: Optional[str] = None,
-        ) -> None:
-            if values is None or isinstance(values, str):
-                raise TypeError(
-                    f"Incorrect argument type to {self.__class__}. Check nargs?"
-                )
-            # Add flag to main group
-            items = getattr(namespace, self.dest, None)
-            items = [] if items is None else items
-            if self.const not in items:
-                items.append(self.const)
-            setattr(namespace, self.dest, items)
-
-            # Add extra data info
-            extra_data = getattr(namespace, self._extra_data_dest, None)
-            extra_data = {} if extra_data is None else extra_data
-            if self.const in extra_data:
-                for val in values:
-                    if val not in extra_data[self.const]:
-                        extra_data[self.const].append(val)
-            else:
-                extra_data[self.const] = values
-            setattr(namespace, self._extra_data_dest, extra_data)
-
-    data_grp.add_argument(
-        "--lat",
-        "-L",
-        action=ExtraDataAction,
-        type=lat_param_type,
-        dest="dtags",
-        const="lat",
-        nargs=1,
-        help=(
-            "Output unit cell parameter; possible values are [a, b, c, alpha, beta,"
-            " gamma]"
-        ),
-        metavar="PARAM",
-    )
+    add_data_args(parser, ("energy", "force", "press", "mag", "vol", "lat"))
 
     endpt = parser.add_mutually_exclusive_group()
     endpt.add_argument(

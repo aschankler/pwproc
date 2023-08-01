@@ -1,6 +1,7 @@
-"""todo"""
+"""Common interface for writing data about structures."""
 
-from collections.abc import Callable, Generator, Iterable, Mapping
+from argparse import Action, ArgumentParser, FileType, Namespace
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Optional, TextIO, Union
 
@@ -51,7 +52,7 @@ def _format_data_output(
     def _fmt_force(_geom_data: GeometryData) -> str:
         _precision = 3
         force, scf_corr = _geom_data.force
-        if abs(scf_corr) > 10 ** -_precision:
+        if abs(scf_corr) > 10**-_precision:
             corr_fstr = f"{{:0{_precision + 2:d}.{_precision:d}f}}"
         else:
             corr_fstr = f"{{:0{_precision + 5:d}.{_precision - 1:d}e}}"
@@ -144,5 +145,155 @@ def write_data(
         data_file.write(headers[tag] + "\n")
         # Write data for each file
         for record in relax_data:
-            data_file.writelines(_format_data_output(record.prefix, tag, record, extra_tags))
+            data_file.writelines(
+                _format_data_output(record.prefix, tag, record, extra_tags)
+            )
         data_file.write("\n")
+
+
+def add_xsf_arg(parser: ArgumentParser) -> None:
+    """Add an option to write .xsf files.
+
+    If the tag is specified,
+    """
+    parser.add_argument(
+        "--xsf",
+        action="store",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Write xsf structures to file. The key `{PREFIX}` in FILE is replaced by"
+            " the calculation prefix"
+        ),
+    )
+
+
+def add_data_args(parser: ArgumentParser, which_tags: Iterable[str]) -> None:
+    """Add options to print various data values.
+
+    Modifies `dtags` and `extra_data` fields in the namespace object.
+    """
+    data_grp = parser.add_argument_group(
+        "Data fields", "Specify additional data to gather from output files"
+    )
+
+    class ExtraDataAction(Action):
+        """Action to save additional fields associated with data tags."""
+
+        # pylint: disable=too-many-arguments,too-few-public-methods
+
+        _extra_data_dest = "extra_data"
+
+        # noinspection PyShadowingBuiltins
+        def __init__(
+            # pylint: disable=redefined-builtin
+            self,
+            option_strings: Sequence[str],
+            dest: str,
+            nargs: Union[int, str, None] = None,
+            const: Any = None,
+            default: Any = None,
+            type: Union[Callable[[str], Any], FileType, None] = None,
+            choices: Optional[Iterable[Any]] = None,
+            required: bool = False,
+            help: Optional[str] = None,
+            metavar: Optional[Union[str, tuple[str, ...]]] = None,
+        ) -> None:
+            if nargs is None:
+                raise ValueError("nargs may not be None")
+            if nargs == 0:
+                raise ValueError("nargs must be nonzero")
+            super().__init__(
+                option_strings=option_strings,
+                dest=dest,
+                nargs=nargs,
+                const=const,
+                default=default,
+                type=type,
+                choices=choices,
+                required=required,
+                help=help,
+                metavar=metavar,
+            )
+
+        def __call__(
+            self,
+            parser: ArgumentParser,
+            namespace: Namespace,
+            values: Union[str, Sequence[Any], None],
+            option_string: Optional[str] = None,
+        ) -> None:
+            if values is None or isinstance(values, str):
+                raise TypeError(
+                    f"Incorrect argument type to {self.__class__}. Check nargs?"
+                )
+            # Add flag to main group
+            items = getattr(namespace, self.dest, None)
+            items = [] if items is None else items
+            if self.const not in items:
+                items.append(self.const)
+            setattr(namespace, self.dest, items)
+
+            # Add extra data info
+            extra_data = getattr(namespace, self._extra_data_dest, None)
+            extra_data = {} if extra_data is None else extra_data
+            if self.const in extra_data:
+                for val in values:
+                    if val not in extra_data[self.const]:
+                        extra_data[self.const].append(val)
+            else:
+                extra_data[self.const] = values
+            setattr(namespace, self._extra_data_dest, extra_data)
+
+    def _lat_param_convert(value: str) -> tuple[str, int]:
+        _param_names = ("a", "b", "c", "alpha", "beta", "gamma")
+        value = value.strip().lower()
+        if value not in _param_names:
+            raise ValueError
+        return value, _param_names.index(value)
+
+    _option_params = {
+        "energy": ("e", "energy", "Write energy (in Ry)"),
+        "force": ("f", "force", "Write force data"),
+        "press": ("p", "press", "Write pressure data"),
+        "mag": ("m", "mag", "Output magnetization data"),
+        "vol": ("v", "volume", "Output unit cell volume"),
+        "lat": (
+            "L",
+            "lat",
+            "Output unit cell parameter; possible values are [a, b, c, alpha, beta, gamma]",
+        ),
+    }
+    _extra_data = {
+        "lat": (1, "PARAM", _lat_param_convert),
+    }
+
+    for tag in which_tags:
+        if tag not in _option_params:
+            raise ValueError(f"Unrecognized data field {tag}")
+
+        short, long, usage = _option_params[tag]
+        if tag not in _extra_data:
+            data_grp.add_argument(
+                f"--{long}",
+                f"-{short}",
+                action="append_const",
+                dest="dtags",
+                const=tag,
+                help=usage,
+            )
+        else:
+            nargs, metavar, convert_fn = _extra_data[tag]
+            data_grp.add_argument(
+                f"--{long}",
+                f"-{short}",
+                action=ExtraDataAction,
+                dest="dtags",
+                const=tag,
+                nargs=nargs,
+                type=convert_fn,
+                help=usage,
+                metavar=metavar,
+            )

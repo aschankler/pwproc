@@ -2,7 +2,7 @@
 
 import sys
 
-from pwproc.write_data import write_xsf
+from pwproc.write_data import write_xsf, add_xsf_arg
 
 
 def get_scf_energy(path):
@@ -53,9 +53,9 @@ def parse_args_scf(args):
 
     parser.add_argument('in_file', action='store', nargs='+',
                         help="List of pw.x output files")
-    parser.add_argument('--xsf', action='store', metavar='FILE',
-                        help="Write xsf structures to file. The key `{PREFIX}`"
-                        " in FILE is substituted for the calculation prefix")
+
+    add_xsf_arg(parser)
+
     parser.add_argument('--energy', nargs='?', type=FileType('w'),
                         const=sys.stdout, metavar='FILE',
                         help="Write energy to file (in Ry)")
