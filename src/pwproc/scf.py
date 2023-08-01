@@ -2,13 +2,14 @@
 
 import sys
 
-from pwproc.write_data import write_xsf, add_xsf_arg
+from pwproc.write_data import add_data_args, add_xsf_arg, write_data, write_xsf
 
 
 def get_scf_energy(path):
     # type: (str) -> float
     """Get the energy in Ry from pw.x output."""
     import re
+
     from pwproc.util import parser_one_line
 
     energy_re = re.compile(r"![\s]+total energy[\s]+=[\s]+(-[\d.]+) Ry")
@@ -27,8 +28,8 @@ def parse_scf(path, coord_type='crystal'):
 
     :returns: GeometryData
     """
-    from pwproc.geometry import convert_positions, GeometryData
-    from pwproc.parsers import get_save_file, get_init_basis, get_init_coord
+    from pwproc.geometry import GeometryData, convert_positions
+    from pwproc.parsers import get_init_basis, get_init_coord, get_save_file
 
     # Run parsers on output to get geometry
     prefix = get_save_file(path)
@@ -55,31 +56,23 @@ def parse_args_scf(args):
                         help="List of pw.x output files")
 
     add_xsf_arg(parser)
-
-    parser.add_argument('--energy', nargs='?', type=FileType('w'),
-                        const=sys.stdout, metavar='FILE',
-                        help="Write energy to file (in Ry)")
+    add_data_args(parser, ("energy", "vol", "lat"))
 
     return parser.parse_args(args)
 
 
 def run_scf(args):
     """Execute `scf` subcommand."""
-    data = {}
+    data = []
     for p in args.in_file:
         geom = parse_scf(p, coord_type='angstrom')
-        if geom.prefix in data:
-            raise ValueError("duplicate prefixes")
-        else:
-            data[geom.prefix] = geom
+        data.append(geom)
 
-    if args.energy:
-        for p, d in data.items():
-            args.energy.write("{}: {}\n".format(p, d.energy))
-        args.energy.close()
+    if args.dtags:
+        write_data(data, sys.stdout, args.dtags, getattr(args, "extra_data", None))
 
     if args.xsf:
-        write_xsf(args.xsf, data.values())
+        write_xsf(args.xsf, data)
 
 
 if __name__ == '__main__':
