@@ -78,14 +78,14 @@ def _format_data_output(
 
     def _fmt_volume(_geom_data: GeometryData) -> str:
         # pylint: disable=import-outside-toplevel
-        from pwproc.geometry.util import cell_volume
+        from pwproc.geometry.cell import cell_volume
 
         volume = cell_volume(_geom_data.basis)
         return f"{volume:.2f}"
 
     def _fmt_lat(_geom_data: GeometryData) -> str:
         # pylint: disable=import-outside-toplevel
-        from pwproc.geometry.util import cell_parameters
+        from pwproc.geometry.cell import cell_parameters
 
         if extra_tags is None or "lat" not in extra_tags:
             raise RuntimeError("Extra data for 'lat' formatter not present.")

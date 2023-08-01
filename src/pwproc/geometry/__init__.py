@@ -1,6 +1,6 @@
 """Read/write functions for geometry files."""
 
-from pwproc.geometry.util import Basis, Species, Tau, convert_coords
+from pwproc.geometry.cell import Basis, Species, Tau, convert_positions, convert_basis
 
 # Put datastructures on the namespace
 from pwproc.geometry.data import GeometryData, RelaxData
