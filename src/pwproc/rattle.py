@@ -135,7 +135,7 @@ def run_rattle(args):
                 f.writelines(out_data)
 
     else:
-        raise ValueError
+        raise ValueError("Format flag must be explicitly specified")
 
 
 if __name__ == '__main__':
