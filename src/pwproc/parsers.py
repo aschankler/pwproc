@@ -207,7 +207,7 @@ class FEnergyParser(ParserBase[Tuple[str, float]]):
 
 class GeometryParser(ParserBase[Tuple[str, Species, Tau]]):
     header_re = re.compile(r"ATOMIC_POSITIONS \((angstrom|crystal|alat|bohr)\)")
-    atom_re = re.compile(r"([a-zA-Z]{1,2})((?:[\s]+[-\d.]+){3})")
+    atom_re = re.compile(r"(\w{1,3})((?:\s+[-\d.]+){3})")
 
     def complete_match(self, match, lines):
         # type: (Match, LookaheadIter[str]) -> None
