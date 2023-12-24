@@ -89,7 +89,7 @@ def get_init_coord(path):
     from pwproc.util import parser_with_header
 
     header_re = re.compile(r"[ \t]+site n\.[ \t]+atom[ \t]+positions \((cryst\. coord\.|alat units)\)")
-    line_re = re.compile(r"[ \t]+[\d]+[ \t]+([\w]{1,2})[ \t]+tau\([ \d\t]+\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
+    line_re = re.compile(r"[ \t]+[\d]+[ \t]+([\w]{1,3})[ \t]+tau\([ \d\t]+\) = \(((?:[ \t]+[-.\d]+){3}[ \t]+)\)")
 
     # Translate the tags in the output header to coordinate types
     coord_types = {"cryst. coord.": 'crystal', "alat units": 'alat'}
