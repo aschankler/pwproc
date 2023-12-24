@@ -1,7 +1,12 @@
 """Add jitter to geometry."""
 
+from collections.abc import Container, Iterator
 from pathlib import Path
+from typing import Optional
+
 import numpy as np
+
+from pwproc.geometry.espresso import CardData, NamelistData
 
 
 def do_rattle_atoms(species, tau, which_atoms=None, if_pos=None, abs_scale=None):
@@ -33,17 +38,27 @@ def do_rattle_cell(basis, rel_scale=None, abs_scale=None):
     return basis + noise
 
 
-def do_rattle_pwi(namelists, cards, rattle_cell=False, which_atoms=None, scale=None):
-    from pwproc.geometry import parse_pwi_cell, parse_pwi_atoms
-    from pwproc.geometry import gen_pwi_atoms, gen_pwi_cell
+def do_rattle_pwi(
+    namelists: dict[str, NamelistData],
+    cards: dict[str, CardData],
+    rattle_cell: bool = False,
+    which_atoms: Container[str] = None,
+    scale: Optional[float] = None,
+) -> Iterator[str]:
+    from pwproc.geometry import (
+        gen_pwi_atoms,
+        gen_pwi_cell,
+        parse_pwi_atoms,
+        parse_pwi_cell,
+    )
 
     # Yield namelists unchanged
-    for nl in namelists:
+    for nl in namelists.values():
         for l in nl.lines:
             yield l
 
     # Yield cards, modifying cell and positions
-    for ca in cards:
+    for ca in cards.values():
         yield '\n'
         if ca.kind == 'ATOMIC_POSITIONS':
             species, tau, if_pos = parse_pwi_atoms(ca)

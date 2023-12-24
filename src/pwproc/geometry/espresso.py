@@ -169,21 +169,26 @@ def _match_card(lines):
     return CardData(card_lines)
 
 
-def read_pwi(lines):
-    # type: (Iterable[str]) -> Tuple[List[NamelistData], List[CardData]]
+def read_pwi(
+    lines: Iterable[str],
+) -> tuple[dict[str, NamelistData], dict[str, CardData]]:
+    """Parse a Quantum Espresso input file.
 
+    Returns:
+        Maps from namelist and card names to parsed objects.
+    """
     lines = LookaheadIter(lines)
-    namelists = []
-    cards = []
+    namelists = {}
+    cards = {}
 
     nl = _match_namelist(lines)
     while nl is not None:
-        namelists.append(nl)
+        namelists[nl.kind] = nl
         nl = _match_namelist(lines)
 
     ca = _match_card(lines)
     while ca is not None:
-        cards.append(ca)
+        cards[ca.kind] = ca
         ca = _match_card(lines)
 
     return namelists, cards
